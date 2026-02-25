@@ -106,8 +106,8 @@ export class AudioStreamer {
       }
 
       source.buffer = audioBuffer;
-      // Gemini デフォルト速度がゆっくりすぎるため 1.3 倍速で再生
-      source.playbackRate.value = 1.3;
+      // TODO: playbackRate > 1.0 は音割れの原因になるため一旦デフォルトに戻す
+      // source.playbackRate.value = 1.2;
       source.connect(this.gainNode);
 
       // 登録済みワークレットへ接続
