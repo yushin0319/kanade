@@ -1,16 +1,19 @@
 import type { ConnectionState, ErrorKind } from "../types";
+import { VoiceIndicator } from "./VoiceIndicator";
 
 interface ControlTrayProps {
   state: ConnectionState;
   error: ErrorKind | null;
+  volume: number;
   onConnect: () => void;
   onDisconnect: () => void;
+  onToggleMute: () => void;
 }
 
 const STATE_LABELS: Record<ConnectionState, string> = {
   idle: "待機中",
   connecting: "接続中...",
-  connected: "接続済み",
+  connected: "通話中",
   muted: "ミュート中",
   error: "エラー",
 };
@@ -33,14 +36,17 @@ const ERROR_MESSAGES: Record<ErrorKind, string> = {
 export function ControlTray({
   state,
   error,
+  volume,
   onConnect,
   onDisconnect,
+  onToggleMute,
 }: ControlTrayProps) {
   const isConnected = state === "connected" || state === "muted";
 
   return (
     <div style={{ padding: "1rem", borderTop: "1px solid #333" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+        {/* 状態インジケータ */}
         <span
           style={{
             display: "inline-block",
@@ -52,6 +58,22 @@ export function ControlTray({
         />
         <span style={{ fontWeight: "bold" }}>{STATE_LABELS[state]}</span>
 
+        {/* 音量インジケータ（接続中のみ） */}
+        {isConnected && (
+          <VoiceIndicator volume={volume} muted={state === "muted"} />
+        )}
+
+        {/* ミュートボタン */}
+        {isConnected && (
+          <button
+            onClick={onToggleMute}
+            style={buttonStyle(state === "muted" ? "#f90" : "#666")}
+          >
+            {state === "muted" ? "ミュート解除" : "ミュート"}
+          </button>
+        )}
+
+        {/* 接続/切断ボタン */}
         {isConnected ? (
           <button onClick={onDisconnect} style={buttonStyle("#f44")}>
             切断

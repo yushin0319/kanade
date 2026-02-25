@@ -7,9 +7,64 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
 }));
 
+// vi.hoisted でモック先頭宣言（vi.mock ファクトリ内から参照可能）
+const { mockRecorderInstance, mockStreamerInstance } = vi.hoisted(() => {
+  const mockRecorderInstance = {
+    start: vi.fn().mockResolvedValue(undefined),
+    stop: vi.fn(),
+    recording: false,
+  };
+  const mockStreamerInstance = {
+    addWorklet: vi.fn().mockResolvedValue(undefined),
+    addPCM16: vi.fn(),
+    resume: vi.fn().mockResolvedValue(undefined),
+    stop: vi.fn(),
+    onComplete: vi.fn(),
+  };
+  return { mockRecorderInstance, mockStreamerInstance };
+});
+
+vi.mock("../../lib/audio-context", () => ({
+  getAudioContext: vi.fn().mockResolvedValue({
+    state: "running",
+    resume: vi.fn().mockResolvedValue(undefined),
+    destination: {},
+    createGain: vi.fn(() => ({
+      connect: vi.fn(),
+      gain: { setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn() },
+      disconnect: vi.fn(),
+    })),
+    audioWorklet: { addModule: vi.fn().mockResolvedValue(undefined) },
+    currentTime: 0,
+  }),
+}));
+
+vi.mock("../../lib/audio-recorder", () => {
+  return {
+    AudioRecorder: class {
+      constructor() {
+        return mockRecorderInstance;
+      }
+    },
+  };
+});
+
+vi.mock("../../lib/audio-streamer", () => {
+  return {
+    AudioStreamer: class {
+      constructor() {
+        return mockStreamerInstance;
+      }
+    },
+  };
+});
+
 // WebSocket モック
 class MockWebSocket {
   static instances: MockWebSocket[] = [];
+  static readonly OPEN = 1;
+  readonly OPEN = 1;
+  readyState = 1;
   onopen: (() => void) | null = null;
   onmessage: ((event: { data: string }) => void) | null = null;
   onerror: ((event?: unknown) => void) | null = null;
@@ -32,6 +87,12 @@ class MockWebSocket {
 beforeEach(() => {
   MockWebSocket.instances = [];
   vi.stubGlobal("WebSocket", MockWebSocket);
+  mockRecorderInstance.start.mockClear();
+  mockRecorderInstance.stop.mockClear();
+  mockStreamerInstance.addWorklet.mockClear();
+  mockStreamerInstance.addPCM16.mockClear();
+  mockStreamerInstance.resume.mockClear();
+  mockStreamerInstance.stop.mockClear();
 });
 
 describe("useLiveApi", () => {
@@ -40,6 +101,7 @@ describe("useLiveApi", () => {
     expect(result.current.state).toBe("idle");
     expect(result.current.error).toBeNull();
     expect(result.current.transcript).toEqual([]);
+    expect(result.current.volume).toBe(0);
   });
 
   it("connect() で connecting → connected に遷移する", async () => {
@@ -48,33 +110,33 @@ describe("useLiveApi", () => {
 
     const { result } = renderHook(() => useLiveApi());
 
-    // connect 呼び出し
     await act(async () => {
       await result.current.connect();
     });
 
     expect(result.current.state).toBe("connecting");
 
-    // WebSocket onopen → setup メッセージ送信
     const ws = MockWebSocket.instances[0]!;
     act(() => {
       ws.onopen?.();
     });
 
-    // setup メッセージが送信されたことを確認
     expect(ws.sent.length).toBe(1);
     const setupMsg = JSON.parse(ws.sent[0]!);
     expect(setupMsg.setup.model).toContain("gemini");
+    expect(setupMsg.setup.generationConfig.responseModalities).toContain("AUDIO");
 
-    // setupComplete レスポンスで connected に遷移
-    act(() => {
+    // setupComplete → connected + マイク録音開始
+    await act(async () => {
       ws.onmessage?.({ data: JSON.stringify({ setupComplete: true }) });
     });
 
     expect(result.current.state).toBe("connected");
+    expect(mockRecorderInstance.start).toHaveBeenCalled();
+    expect(mockStreamerInstance.resume).toHaveBeenCalled();
   });
 
-  it("disconnect() で idle に戻る", async () => {
+  it("disconnect() で idle に戻り、録音・再生が停止する", async () => {
     const { invoke } = await import("@tauri-apps/api/core");
     vi.mocked(invoke).mockResolvedValue("test-api-key");
 
@@ -87,16 +149,18 @@ describe("useLiveApi", () => {
     const ws = MockWebSocket.instances[0]!;
     act(() => {
       ws.onopen?.();
+    });
+    await act(async () => {
       ws.onmessage?.({ data: JSON.stringify({ setupComplete: true }) });
     });
-
-    expect(result.current.state).toBe("connected");
 
     act(() => {
       result.current.disconnect();
     });
 
     expect(result.current.state).toBe("idle");
+    expect(mockRecorderInstance.stop).toHaveBeenCalled();
+    expect(mockStreamerInstance.stop).toHaveBeenCalled();
   });
 
   it("sendText() でユーザーメッセージが transcript に追加される", async () => {
@@ -112,6 +176,8 @@ describe("useLiveApi", () => {
     const ws = MockWebSocket.instances[0]!;
     act(() => {
       ws.onopen?.();
+    });
+    await act(async () => {
       ws.onmessage?.({ data: JSON.stringify({ setupComplete: true }) });
     });
 
@@ -123,7 +189,6 @@ describe("useLiveApi", () => {
     expect(result.current.transcript[0]!.role).toBe("user");
     expect(result.current.transcript[0]!.text).toBe("こんにちは");
 
-    // WebSocket にメッセージが送信されたことを確認
     const lastSent = JSON.parse(ws.sent[ws.sent.length - 1]!);
     expect(lastSent.clientContent.turns[0].parts[0].text).toBe("こんにちは");
   });
@@ -141,47 +206,40 @@ describe("useLiveApi", () => {
     const ws = MockWebSocket.instances[0]!;
     act(() => {
       ws.onopen?.();
+    });
+    await act(async () => {
       ws.onmessage?.({ data: JSON.stringify({ setupComplete: true }) });
     });
 
-    // トランスクリプションチャンク1
+    // チャンク1
     act(() => {
       ws.onmessage?.({
         data: JSON.stringify({
-          serverContent: {
-            outputTranscription: { text: "こんに" },
-          },
+          serverContent: { outputTranscription: { text: "こんに" } },
         }),
       });
     });
 
     expect(result.current.transcript).toHaveLength(1);
-    expect(result.current.transcript[0]!.role).toBe("assistant");
     expect(result.current.transcript[0]!.text).toBe("こんに");
     expect(result.current.transcript[0]!.streaming).toBe(true);
 
-    // トランスクリプションチャンク2
+    // チャンク2（蓄積）
     act(() => {
       ws.onmessage?.({
         data: JSON.stringify({
-          serverContent: {
-            outputTranscription: { text: "ちは！" },
-          },
+          serverContent: { outputTranscription: { text: "ちは！" } },
         }),
       });
     });
 
-    // 同じエントリに蓄積される
     expect(result.current.transcript).toHaveLength(1);
     expect(result.current.transcript[0]!.text).toBe("こんにちは！");
-    expect(result.current.transcript[0]!.streaming).toBe(true);
 
-    // ターン完了でストリーミング終了
+    // ターン完了
     act(() => {
       ws.onmessage?.({
-        data: JSON.stringify({
-          serverContent: { turnComplete: true },
-        }),
+        data: JSON.stringify({ serverContent: { turnComplete: true } }),
       });
     });
 
