@@ -1,21 +1,26 @@
 import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useLiveApi } from "./hooks/use-live-api";
+import { useSettings } from "./hooks/use-settings";
 import { ControlTray } from "./components/ControlTray";
 import { SendToCCButton } from "./components/SendToCCButton";
+import { SettingsPanel } from "./components/SettingsPanel";
 
 function App() {
+  const { settings, loaded, loadSettings, updateSetting } = useSettings();
   const { state, error, transcript, volume, connect, disconnect, sendText, toggleMute } =
-    useLiveApi();
+    useLiveApi({ model: settings.model, voice: settings.voice });
   const [input, setInput] = useState("");
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [hasKey, setHasKey] = useState<boolean | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
 
-  // API Key 存在チェック
+  // 設定 + API Key 存在チェック
   useEffect(() => {
+    loadSettings();
     invoke<boolean>("has_api_key").then(setHasKey).catch(() => setHasKey(false));
-  }, []);
+  }, [loadSettings]);
 
   // 自動スクロール
   useEffect(() => {
@@ -39,11 +44,12 @@ function App() {
     }
   };
 
-  // API Key 未設定時のオンボーディング
-  if (hasKey === null) {
+  // 読み込み中
+  if (hasKey === null || !loaded) {
     return <div style={containerStyle}>読み込み中...</div>;
   }
 
+  // API Key 未設定時のオンボーディング
   if (!hasKey) {
     return (
       <div style={containerStyle}>
@@ -60,7 +66,7 @@ function App() {
             placeholder="AIza..."
             style={inputStyle}
           />
-          <button onClick={handleSaveKey} style={sendButtonStyle}>
+          <button onClick={handleSaveKey} style={actionButtonStyle}>
             保存
           </button>
         </div>
@@ -93,8 +99,18 @@ function App() {
         <span style={{ color: "#888", fontSize: "0.8rem" }}>
           音声モード
         </span>
-        <div style={{ marginLeft: "auto" }}>
-          <SendToCCButton transcript={transcript} />
+        <div style={{ marginLeft: "auto", display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          <SendToCCButton
+            transcript={transcript}
+            pyautoguiEnabled={settings.pyautoguiEnabled}
+          />
+          <button
+            onClick={() => setShowSettings(true)}
+            style={settingsButtonStyle}
+            title="設定"
+          >
+            ⚙
+          </button>
         </div>
       </div>
 
@@ -150,7 +166,7 @@ function App() {
             placeholder="メッセージを入力..."
             style={inputStyle}
           />
-          <button onClick={handleSend} style={sendButtonStyle}>
+          <button onClick={handleSend} style={actionButtonStyle}>
             送信
           </button>
         </div>
@@ -165,6 +181,15 @@ function App() {
         onDisconnect={disconnect}
         onToggleMute={toggleMute}
       />
+
+      {/* 設定パネル */}
+      {showSettings && (
+        <SettingsPanel
+          settings={settings}
+          onUpdate={updateSetting}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
     </div>
   );
 }
@@ -191,12 +216,22 @@ const inputStyle: React.CSSProperties = {
   outline: "none",
 };
 
-const sendButtonStyle: React.CSSProperties = {
+const actionButtonStyle: React.CSSProperties = {
   padding: "0.5rem 1rem",
   fontSize: "0.9rem",
   backgroundColor: "#4caf50",
   color: "#fff",
   border: "none",
+  borderRadius: 6,
+  cursor: "pointer",
+};
+
+const settingsButtonStyle: React.CSSProperties = {
+  padding: "0.3rem 0.5rem",
+  fontSize: "1rem",
+  backgroundColor: "transparent",
+  color: "#aaa",
+  border: "1px solid #555",
   borderRadius: 6,
   cursor: "pointer",
 };
