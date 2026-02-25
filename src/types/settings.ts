@@ -11,8 +11,8 @@ export interface Settings {
 }
 
 export type GeminiModel =
-  | "gemini-2.0-flash-exp"
-  | "gemini-2.5-flash-preview-05-20";
+  | "gemini-2.5-flash-native-audio-latest"
+  | "gemini-2.5-flash-native-audio-preview-12-2025";
 
 export type GeminiVoice =
   | "Puck"
@@ -23,7 +23,7 @@ export type GeminiVoice =
 
 export const DEFAULT_SETTINGS: Settings = {
   apiKey: "",
-  model: "gemini-2.0-flash-exp",
+  model: "gemini-2.5-flash-native-audio-latest",
   voice: "Puck",
   pyautoguiEnabled: false,
 };

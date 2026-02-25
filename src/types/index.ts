@@ -18,6 +18,8 @@ export interface TranscriptEntry {
   role: "user" | "assistant";
   text: string;
   timestamp: number;
+  /** ストリーミング中（まだ応答が完了していない） */
+  streaming?: boolean;
 }
 
 /** ブリーフィングデータ（CC から注入） */

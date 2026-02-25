@@ -12,8 +12,8 @@ class MockWebSocket {
   static instances: MockWebSocket[] = [];
   onopen: (() => void) | null = null;
   onmessage: ((event: { data: string }) => void) | null = null;
-  onerror: (() => void) | null = null;
-  onclose: (() => void) | null = null;
+  onerror: ((event?: unknown) => void) | null = null;
+  onclose: ((event: { code: number; reason: string }) => void) | null = null;
   sent: string[] = [];
 
   constructor(public url: string) {
@@ -25,7 +25,7 @@ class MockWebSocket {
   }
 
   close() {
-    this.onclose?.();
+    this.onclose?.({ code: 1000, reason: "" });
   }
 }
 
@@ -128,7 +128,7 @@ describe("useLiveApi", () => {
     expect(lastSent.clientContent.turns[0].parts[0].text).toBe("こんにちは");
   });
 
-  it("Gemini のレスポンスが transcript に追加される", async () => {
+  it("outputTranscription でアシスタント応答がストリーミング表示される", async () => {
     const { invoke } = await import("@tauri-apps/api/core");
     vi.mocked(invoke).mockResolvedValue("test-api-key");
 
@@ -144,14 +144,12 @@ describe("useLiveApi", () => {
       ws.onmessage?.({ data: JSON.stringify({ setupComplete: true }) });
     });
 
-    // Gemini テキストレスポンス
+    // トランスクリプションチャンク1
     act(() => {
       ws.onmessage?.({
         data: JSON.stringify({
           serverContent: {
-            modelTurn: {
-              parts: [{ text: "こんにちは！" }],
-            },
+            outputTranscription: { text: "こんに" },
           },
         }),
       });
@@ -159,7 +157,35 @@ describe("useLiveApi", () => {
 
     expect(result.current.transcript).toHaveLength(1);
     expect(result.current.transcript[0]!.role).toBe("assistant");
+    expect(result.current.transcript[0]!.text).toBe("こんに");
+    expect(result.current.transcript[0]!.streaming).toBe(true);
+
+    // トランスクリプションチャンク2
+    act(() => {
+      ws.onmessage?.({
+        data: JSON.stringify({
+          serverContent: {
+            outputTranscription: { text: "ちは！" },
+          },
+        }),
+      });
+    });
+
+    // 同じエントリに蓄積される
+    expect(result.current.transcript).toHaveLength(1);
     expect(result.current.transcript[0]!.text).toBe("こんにちは！");
+    expect(result.current.transcript[0]!.streaming).toBe(true);
+
+    // ターン完了でストリーミング終了
+    act(() => {
+      ws.onmessage?.({
+        data: JSON.stringify({
+          serverContent: { turnComplete: true },
+        }),
+      });
+    });
+
+    expect(result.current.transcript[0]!.streaming).toBe(false);
   });
 
   it("WebSocket エラーで error 状態になる", async () => {
