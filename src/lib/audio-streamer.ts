@@ -106,6 +106,7 @@ export class AudioStreamer {
       }
 
       source.buffer = audioBuffer;
+      // Gemini デフォルト速度がゆっくりすぎるため 1.3 倍速で再生
       source.playbackRate.value = 1.3;
       source.connect(this.gainNode);
 
