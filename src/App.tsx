@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useLiveApi } from "./hooks/use-live-api";
 import { ControlTray } from "./components/ControlTray";
+import { SendToCCButton } from "./components/SendToCCButton";
 
 function App() {
   const { state, error, transcript, volume, connect, disconnect, sendText, toggleMute } =
@@ -92,6 +93,9 @@ function App() {
         <span style={{ color: "#888", fontSize: "0.8rem" }}>
           音声モード
         </span>
+        <div style={{ marginLeft: "auto" }}>
+          <SendToCCButton transcript={transcript} />
+        </div>
       </div>
 
       {/* 会話ログ */}
