@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { ConnectionState, ErrorKind, TranscriptEntry } from "../types";
+import type { GeminiModel, GeminiVoice } from "../types/settings";
 import { AudioRecorder } from "../lib/audio-recorder";
 import { AudioStreamer } from "../lib/audio-streamer";
 import { base64ToArrayBuffer } from "../lib/audio-utils";
@@ -22,7 +23,12 @@ export interface UseLiveApiReturn {
 
 const GEMINI_WS_BASE = "wss://generativelanguage.googleapis.com/ws";
 
-export function useLiveApi(): UseLiveApiReturn {
+export interface UseLiveApiOptions {
+  model?: GeminiModel;
+  voice?: GeminiVoice;
+}
+
+export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
   const [state, setState] = useState<ConnectionState>("idle");
   const [error, setError] = useState<ErrorKind | null>(null);
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
@@ -151,7 +157,8 @@ export function useLiveApi(): UseLiveApiReturn {
       console.warn("Briefing/prompt load failed (continuing without):", e);
     }
 
-    const model = "gemini-2.5-flash-native-audio-latest";
+    const model = options.model ?? "gemini-2.5-flash-native-audio-latest";
+    const voice = options.voice ?? "Puck";
     const wsUrl = `${GEMINI_WS_BASE}/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
 
     console.log("WebSocket connecting to:", wsUrl.replace(apiKey, "***"));
@@ -168,7 +175,7 @@ export function useLiveApi(): UseLiveApiReturn {
           speechConfig: {
             voiceConfig: {
               prebuiltVoiceConfig: {
-                voiceName: "Puck",
+                voiceName: voice,
               },
             },
           },
@@ -282,7 +289,7 @@ export function useLiveApi(): UseLiveApiReturn {
       }
       wsRef.current = null;
     };
-  }, [sendAudio, updateStreaming, finalizeStreaming]);
+  }, [sendAudio, updateStreaming, finalizeStreaming, options.model, options.voice]);
 
   const disconnect = useCallback(() => {
     recorderRef.current?.stop();

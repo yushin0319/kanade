@@ -1,4 +1,5 @@
 mod permissions;
+mod tray;
 
 use std::process::Command;
 use tauri::Manager;
@@ -165,6 +166,18 @@ pub fn run() {
             // WebView2 マイク権限自動許可
             let webview = app.get_webview_window("main").unwrap();
             permissions::setup_mic_permission(&webview);
+
+            // システムトレイ構築
+            tray::setup_tray(app)?;
+
+            // ウィンドウ閉じ → トレイに最小化（終了しない）
+            let window_for_close = webview.clone();
+            webview.on_window_event(move |event| {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window_for_close.hide();
+                }
+            });
 
             Ok(())
         })
