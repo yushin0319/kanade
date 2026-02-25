@@ -4,7 +4,7 @@ import { useLiveApi } from "./hooks/use-live-api";
 import { ControlTray } from "./components/ControlTray";
 
 function App() {
-  const { state, error, transcript, connect, disconnect, sendText } =
+  const { state, error, transcript, volume, connect, disconnect, sendText, toggleMute } =
     useLiveApi();
   const [input, setInput] = useState("");
   const [apiKeyInput, setApiKeyInput] = useState("");
@@ -90,7 +90,7 @@ function App() {
       >
         <h1 style={{ fontSize: "1.2rem", margin: 0 }}>Kanade</h1>
         <span style={{ color: "#888", fontSize: "0.8rem" }}>
-          テキストモード
+          音声モード
         </span>
       </div>
 
@@ -129,8 +129,8 @@ function App() {
         <div ref={transcriptEndRef} />
       </div>
 
-      {/* テキスト入力 */}
-      {state === "connected" && (
+      {/* テキスト入力（接続中・ミュート中とも使用可） */}
+      {(state === "connected" || state === "muted") && (
         <div
           style={{
             padding: "0.75rem 1rem",
@@ -156,8 +156,10 @@ function App() {
       <ControlTray
         state={state}
         error={error}
+        volume={volume}
         onConnect={connect}
         onDisconnect={disconnect}
+        onToggleMute={toggleMute}
       />
     </div>
   );

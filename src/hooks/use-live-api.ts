@@ -1,28 +1,35 @@
 import { useState, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { ConnectionState, ErrorKind, TranscriptEntry } from "../types";
+import { AudioRecorder } from "../lib/audio-recorder";
+import { AudioStreamer } from "../lib/audio-streamer";
+import { base64ToArrayBuffer } from "../lib/audio-utils";
+import { getAudioContext } from "../lib/audio-context";
+import VolMeterWorklet from "../lib/worklets/vol-meter";
 
-/** Gemini Live API テキスト接続フック */
+/** Gemini Live API 音声チャットフック */
 export interface UseLiveApiReturn {
   state: ConnectionState;
   error: ErrorKind | null;
   transcript: TranscriptEntry[];
+  volume: number;
   connect: () => Promise<void>;
   disconnect: () => void;
   sendText: (text: string) => void;
+  toggleMute: () => void;
 }
 
-// Gemini Live API の WebSocket エンドポイント
 const GEMINI_WS_BASE = "wss://generativelanguage.googleapis.com/ws";
 
 export function useLiveApi(): UseLiveApiReturn {
   const [state, setState] = useState<ConnectionState>("idle");
   const [error, setError] = useState<ErrorKind | null>(null);
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
+  const [volume, setVolume] = useState(0);
   const wsRef = useRef<WebSocket | null>(null);
   const errorRef = useRef(false);
-  // ストリーミング中のアシスタント応答を蓄積
-  const pendingTextRef = useRef("");
+  const recorderRef = useRef<AudioRecorder | null>(null);
+  const streamerRef = useRef<AudioStreamer | null>(null);
 
   const addEntry = useCallback((role: "user" | "assistant", text: string) => {
     setTranscript((prev) => [
@@ -36,13 +43,11 @@ export function useLiveApi(): UseLiveApiReturn {
     setTranscript((prev) => {
       const last = prev[prev.length - 1];
       if (last && last.role === "assistant" && last.streaming) {
-        // 既存のストリーミングエントリを更新
         return [
           ...prev.slice(0, -1),
           { ...last, text: last.text + text },
         ];
       }
-      // 新しいストリーミングエントリを作成
       return [
         ...prev,
         { role: "assistant" as const, text, timestamp: Date.now(), streaming: true },
@@ -63,17 +68,29 @@ export function useLiveApi(): UseLiveApiReturn {
     });
   }, []);
 
+  /** マイク音声データを WebSocket 経由で送信 */
+  const sendAudio = useCallback((base64: string) => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({
+      realtimeInput: {
+        mediaChunks: [{
+          mimeType: "audio/pcm;rate=16000",
+          data: base64,
+        }],
+      },
+    }));
+  }, []);
+
   const connect = useCallback(async () => {
     if (wsRef.current) return;
 
     setState("connecting");
     setError(null);
     errorRef.current = false;
-    pendingTextRef.current = "";
 
     let apiKey: string;
     try {
-      // Rust 側から API Key を取得
       apiKey = await invoke<string>("get_api_key");
     } catch (e) {
       console.error("get_api_key failed:", e);
@@ -86,6 +103,25 @@ export function useLiveApi(): UseLiveApiReturn {
       console.error("API key is empty");
       setState("error");
       setError("connection_failed");
+      return;
+    }
+
+    // 音声再生用 AudioContext + AudioStreamer を準備
+    let audioStreamer: AudioStreamer;
+    try {
+      const playbackCtx = await getAudioContext({ id: "playback", sampleRate: 24000 });
+      audioStreamer = new AudioStreamer(playbackCtx, 24000);
+      // 再生側の VU メーター
+      await audioStreamer.addWorklet(
+        "output-vu-meter",
+        VolMeterWorklet,
+        () => {},
+      );
+      streamerRef.current = audioStreamer;
+    } catch (e) {
+      console.error("AudioStreamer init failed:", e);
+      setState("error");
+      setError("unknown");
       return;
     }
 
@@ -129,24 +165,47 @@ export function useLiveApi(): UseLiveApiReturn {
 
         const data = JSON.parse(raw);
 
-        // デバッグ: メッセージのキーを表示
-        const keys = Object.keys(data);
-        const scKeys = data.serverContent ? Object.keys(data.serverContent) : [];
-        console.log("WS keys:", keys, "serverContent keys:", scKeys);
-
-        // セットアップ完了レスポンス
+        // セットアップ完了 → マイク録音開始
         if (data.setupComplete) {
-          console.log("Setup complete");
+          console.log("Setup complete, starting recorder");
           setState("connected");
+
+          // マイク録音を開始
+          try {
+            const recorder = new AudioRecorder(
+              {
+                onData: sendAudio,
+                onVolume: setVolume,
+              },
+              16000,
+            );
+            await recorder.start();
+            recorderRef.current = recorder;
+            await audioStreamer.resume();
+          } catch (e) {
+            console.error("Recorder start failed:", e);
+            setState("error");
+            setError("mic_error");
+          }
           return;
         }
 
-        // 音声出力のトランスクリプション（チャンクをストリーミング表示）
+        // 音声データ受信 → 再生
+        if (data.serverContent?.modelTurn?.parts) {
+          for (const part of data.serverContent.modelTurn.parts) {
+            if (part.inlineData?.data) {
+              const pcm16 = new Uint8Array(base64ToArrayBuffer(part.inlineData.data));
+              audioStreamer.addPCM16(pcm16);
+            }
+          }
+        }
+
+        // 音声出力のトランスクリプション
         if (data.serverContent?.outputTranscription?.text) {
           updateStreaming(data.serverContent.outputTranscription.text);
         }
 
-        // ターン完了でストリーミングを確定
+        // ターン完了
         if (data.serverContent?.turnComplete) {
           console.log("Turn complete");
           finalizeStreaming();
@@ -166,6 +225,13 @@ export function useLiveApi(): UseLiveApiReturn {
 
     ws.onclose = (ev) => {
       console.log("WebSocket closed:", ev.code, ev.reason);
+      // 録音・再生を停止
+      recorderRef.current?.stop();
+      recorderRef.current = null;
+      streamerRef.current?.stop();
+      streamerRef.current = null;
+      setVolume(0);
+
       if (ev.code !== 1000 && ev.code !== 1005 && !errorRef.current) {
         errorRef.current = true;
         setState("error");
@@ -175,9 +241,15 @@ export function useLiveApi(): UseLiveApiReturn {
       }
       wsRef.current = null;
     };
-  }, [updateStreaming, finalizeStreaming]);
+  }, [sendAudio, updateStreaming, finalizeStreaming]);
 
   const disconnect = useCallback(() => {
+    recorderRef.current?.stop();
+    recorderRef.current = null;
+    streamerRef.current?.stop();
+    streamerRef.current = null;
+    setVolume(0);
+
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
@@ -186,9 +258,24 @@ export function useLiveApi(): UseLiveApiReturn {
     setError(null);
   }, []);
 
+  const toggleMute = useCallback(() => {
+    const recorder = recorderRef.current;
+    if (!recorder) return;
+
+    if (state === "muted") {
+      // ミュート解除: 録音再開
+      recorder.start().then(() => setState("connected"));
+    } else if (state === "connected") {
+      // ミュート: 録音停止
+      recorder.stop();
+      setVolume(0);
+      setState("muted");
+    }
+  }, [state]);
+
   const sendText = useCallback(
     (text: string) => {
-      if (!wsRef.current || state !== "connected") return;
+      if (!wsRef.current || (state !== "connected" && state !== "muted")) return;
 
       const message = {
         clientContent: {
@@ -207,5 +294,5 @@ export function useLiveApi(): UseLiveApiReturn {
     [state, addEntry],
   );
 
-  return { state, error, transcript, connect, disconnect, sendText };
+  return { state, error, transcript, volume, connect, disconnect, sendText, toggleMute };
 }
