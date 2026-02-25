@@ -329,4 +329,95 @@ describe("useLiveApi", () => {
     expect(result.current.state).toBe("error");
     expect(result.current.error).toBe("connection_failed");
   });
+
+  describe("接続安全性", () => {
+    it("connect() を連続呼び出ししても WebSocket は1本だけ", async () => {
+      const { invoke } = await import("@tauri-apps/api/core");
+      vi.mocked(invoke).mockResolvedValue("test-api-key");
+
+      const { result } = renderHook(() => useLiveApi());
+
+      // 2回同時に呼び出し
+      await act(async () => {
+        const p1 = result.current.connect();
+        const p2 = result.current.connect();
+        await Promise.all([p1, p2]);
+      });
+
+      // WebSocket は1本だけ作られるべき
+      expect(MockWebSocket.instances.length).toBe(1);
+    });
+
+    it("connect() 中に再度 connect() してもブロックされる", async () => {
+      const { invoke } = await import("@tauri-apps/api/core");
+      // get_api_key を遅延させてレースコンディションの窓を広げる
+      vi.mocked(invoke).mockImplementation(
+        () => new Promise((resolve) => setTimeout(() => resolve("test-api-key"), 50)),
+      );
+
+      const { result } = renderHook(() => useLiveApi());
+
+      await act(async () => {
+        const p1 = result.current.connect();
+        // 少し遅らせて2回目を呼ぶ（1回目はまだ await 中）
+        await new Promise((r) => setTimeout(r, 10));
+        const p2 = result.current.connect();
+        await Promise.all([p1, p2]);
+      });
+
+      expect(MockWebSocket.instances.length).toBe(1);
+    });
+
+    it("アンマウント時に WebSocket が自動切断される", async () => {
+      const { invoke } = await import("@tauri-apps/api/core");
+      vi.mocked(invoke).mockResolvedValue("test-api-key");
+
+      const { result, unmount } = renderHook(() => useLiveApi());
+
+      await act(async () => {
+        await result.current.connect();
+      });
+
+      const ws = MockWebSocket.instances[0]!;
+      act(() => {
+        ws.onopen?.();
+      });
+      await act(async () => {
+        ws.onmessage?.({ data: JSON.stringify({ setupComplete: true }) });
+      });
+
+      expect(MockWebSocket.instances.length).toBe(1);
+
+      // アンマウント → WebSocket が閉じられるべき
+      const closeSpy = vi.spyOn(ws, "close");
+      act(() => {
+        unmount();
+      });
+
+      expect(closeSpy).toHaveBeenCalled();
+      expect(mockRecorderInstance.stop).toHaveBeenCalled();
+      expect(mockStreamerInstance.stop).toHaveBeenCalled();
+    });
+
+    it("onerror 発生時にソケットが確実に close される", async () => {
+      const { invoke } = await import("@tauri-apps/api/core");
+      vi.mocked(invoke).mockResolvedValue("test-api-key");
+
+      const { result } = renderHook(() => useLiveApi());
+
+      await act(async () => {
+        await result.current.connect();
+      });
+
+      const ws = MockWebSocket.instances[0]!;
+      const closeSpy = vi.spyOn(ws, "close");
+
+      act(() => {
+        ws.onerror?.();
+      });
+
+      expect(closeSpy).toHaveBeenCalled();
+      expect(result.current.state).toBe("error");
+    });
+  });
 });

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { ConnectionState, ErrorKind, TranscriptEntry } from "../types";
 import type { GeminiModel, GeminiVoice } from "../types/settings";
@@ -34,6 +34,7 @@ export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const [volume, setVolume] = useState(0);
   const wsRef = useRef<WebSocket | null>(null);
+  const connectingRef = useRef(false); // レースコンディション防止
   const errorRef = useRef(false);
   const recorderRef = useRef<AudioRecorder | null>(null);
   const streamerRef = useRef<AudioStreamer | null>(null);
@@ -91,7 +92,9 @@ export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
   }, []);
 
   const connect = useCallback(async () => {
-    if (wsRef.current) return;
+    // 既存接続 or 接続処理中ならブロック（レースコンディション防止）
+    if (wsRef.current || connectingRef.current) return;
+    connectingRef.current = true;
 
     setState("connecting");
     setError(null);
@@ -102,6 +105,7 @@ export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
       apiKey = await invoke<string>("get_api_key");
     } catch (e) {
       console.error("get_api_key failed:", e);
+      connectingRef.current = false;
       setState("error");
       setError("connection_failed");
       return;
@@ -109,6 +113,7 @@ export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
 
     if (!apiKey) {
       console.error("API key is empty");
+      connectingRef.current = false;
       setState("error");
       setError("connection_failed");
       return;
@@ -128,6 +133,7 @@ export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
       streamerRef.current = audioStreamer;
     } catch (e) {
       console.error("AudioStreamer init failed:", e);
+      connectingRef.current = false;
       setState("error");
       setError("unknown");
       return;
@@ -268,7 +274,8 @@ export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
       errorRef.current = true;
       setState("error");
       setError("connection_failed");
-      wsRef.current = null;
+      // ソケットを確実に閉じる（onclose が呼ばれてクリーンアップされる）
+      ws.close();
     };
 
     ws.onclose = (ev) => {
@@ -288,6 +295,7 @@ export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
         setState("idle");
       }
       wsRef.current = null;
+      connectingRef.current = false;
     };
   }, [sendAudio, updateStreaming, finalizeStreaming, options.model, options.voice]);
 
@@ -302,6 +310,7 @@ export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
       wsRef.current.close();
       wsRef.current = null;
     }
+    connectingRef.current = false;
     setState("idle");
     setError(null);
   }, []);
@@ -341,6 +350,21 @@ export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
     },
     [state, addEntry],
   );
+
+  // アンマウント時に接続を自動切断（リーク防止）
+  useEffect(() => {
+    return () => {
+      recorderRef.current?.stop();
+      recorderRef.current = null;
+      streamerRef.current?.stop();
+      streamerRef.current = null;
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+      connectingRef.current = false;
+    };
+  }, []);
 
   return { state, error, transcript, volume, connect, disconnect, sendText, toggleMute };
 }
