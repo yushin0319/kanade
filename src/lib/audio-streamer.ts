@@ -106,6 +106,7 @@ export class AudioStreamer {
       }
 
       source.buffer = audioBuffer;
+      source.playbackRate.value = 1.3;
       source.connect(this.gainNode);
 
       // 登録済みワークレットへ接続
