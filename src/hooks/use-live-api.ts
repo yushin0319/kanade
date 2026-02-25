@@ -5,6 +5,7 @@ import { AudioRecorder } from "../lib/audio-recorder";
 import { AudioStreamer } from "../lib/audio-streamer";
 import { base64ToArrayBuffer } from "../lib/audio-utils";
 import { getAudioContext } from "../lib/audio-context";
+import { parseBriefing, buildSystemInstruction } from "../lib/briefing-loader";
 import VolMeterWorklet from "../lib/worklets/vol-meter";
 
 /** Gemini Live API 音声チャットフック */
@@ -38,11 +39,11 @@ export function useLiveApi(): UseLiveApiReturn {
     ]);
   }, []);
 
-  // ストリーミング中のアシスタントメッセージをリアルタイム更新
-  const updateStreaming = useCallback((text: string) => {
+  /** 指定ロールのストリーミングエントリをリアルタイム更新 */
+  const updateStreaming = useCallback((role: "user" | "assistant", text: string) => {
     setTranscript((prev) => {
       const last = prev[prev.length - 1];
-      if (last && last.role === "assistant" && last.streaming) {
+      if (last && last.role === role && last.streaming) {
         return [
           ...prev.slice(0, -1),
           { ...last, text: last.text + text },
@@ -50,15 +51,16 @@ export function useLiveApi(): UseLiveApiReturn {
       }
       return [
         ...prev,
-        { role: "assistant" as const, text, timestamp: Date.now(), streaming: true },
+        { role, text, timestamp: Date.now(), streaming: true },
       ];
     });
   }, []);
 
-  const finalizeStreaming = useCallback(() => {
+  /** 指定ロールのストリーミングを確定 */
+  const finalizeStreaming = useCallback((role: "user" | "assistant") => {
     setTranscript((prev) => {
       const last = prev[prev.length - 1];
-      if (last && last.role === "assistant" && last.streaming) {
+      if (last && last.role === role && last.streaming) {
         return [
           ...prev.slice(0, -1),
           { ...last, streaming: false },
@@ -125,6 +127,30 @@ export function useLiveApi(): UseLiveApiReturn {
       return;
     }
 
+    // ブリーフィング・システムプロンプトの読み込み（失敗しても続行）
+    let systemInstruction = "";
+    try {
+      const [briefingJson, systemPrompt] = await Promise.allSettled([
+        invoke<string>("read_briefing"),
+        invoke<string>("read_system_prompt"),
+      ]);
+      const briefingText = briefingJson.status === "fulfilled" ? briefingJson.value : null;
+      const promptText = systemPrompt.status === "fulfilled" ? systemPrompt.value : undefined;
+
+      if (briefingText) {
+        const briefing = parseBriefing(JSON.parse(briefingText));
+        if (briefing) {
+          systemInstruction = buildSystemInstruction(briefing, promptText);
+          console.log("System instruction loaded:", systemInstruction.length, "chars");
+        }
+      } else if (promptText) {
+        systemInstruction = promptText;
+        console.log("System prompt loaded (no briefing):", systemInstruction.length, "chars");
+      }
+    } catch (e) {
+      console.warn("Briefing/prompt load failed (continuing without):", e);
+    }
+
     const model = "gemini-2.5-flash-native-audio-latest";
     const wsUrl = `${GEMINI_WS_BASE}/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
 
@@ -135,23 +161,30 @@ export function useLiveApi(): UseLiveApiReturn {
 
     ws.onopen = () => {
       console.log("WebSocket opened");
-      const setupMessage = {
-        setup: {
-          model: `models/${model}`,
-          generationConfig: {
-            responseModalities: ["AUDIO"],
-            speechConfig: {
-              voiceConfig: {
-                prebuiltVoiceConfig: {
-                  voiceName: "Puck",
-                },
+      const setup: Record<string, unknown> = {
+        model: `models/${model}`,
+        generationConfig: {
+          responseModalities: ["AUDIO"],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: {
+                voiceName: "Puck",
               },
             },
           },
-          outputAudioTranscription: {},
         },
+        inputAudioTranscription: {},
+        outputAudioTranscription: {},
       };
-      ws.send(JSON.stringify(setupMessage));
+
+      // System Instructions がある場合は注入
+      if (systemInstruction) {
+        setup.systemInstruction = {
+          parts: [{ text: systemInstruction }],
+        };
+      }
+
+      ws.send(JSON.stringify({ setup }));
     };
 
     ws.onmessage = async (event) => {
@@ -190,8 +223,14 @@ export function useLiveApi(): UseLiveApiReturn {
           return;
         }
 
-        // 音声データ受信 → 再生
+        // ユーザー音声のトランスクリプション
+        if (data.serverContent?.inputTranscription?.text) {
+          updateStreaming("user", data.serverContent.inputTranscription.text);
+        }
+
+        // 音声データ受信 → 再生（アシスタント応答開始 = ユーザー発話終了）
         if (data.serverContent?.modelTurn?.parts) {
+          finalizeStreaming("user");
           for (const part of data.serverContent.modelTurn.parts) {
             if (part.inlineData?.data) {
               const pcm16 = new Uint8Array(base64ToArrayBuffer(part.inlineData.data));
@@ -202,13 +241,15 @@ export function useLiveApi(): UseLiveApiReturn {
 
         // 音声出力のトランスクリプション
         if (data.serverContent?.outputTranscription?.text) {
-          updateStreaming(data.serverContent.outputTranscription.text);
+          finalizeStreaming("user");
+          updateStreaming("assistant", data.serverContent.outputTranscription.text);
         }
 
         // ターン完了
         if (data.serverContent?.turnComplete) {
           console.log("Turn complete");
-          finalizeStreaming();
+          finalizeStreaming("user");
+          finalizeStreaming("assistant");
         }
       } catch (e) {
         console.warn("WS message parse error:", e);

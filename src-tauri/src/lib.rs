@@ -34,6 +34,26 @@ fn set_api_key(app: tauri::AppHandle, key: String) -> Result<(), String> {
     Ok(())
 }
 
+/// ~/.claude/voice-chat/ からブリーフィング JSON を読み込み
+#[tauri::command]
+fn read_briefing() -> Result<String, String> {
+    let home = dirs::home_dir().ok_or("Home directory not found")?;
+    let path = home.join(".claude").join("voice-chat").join("briefing.json");
+    std::fs::read_to_string(&path).map_err(|e| format!("Failed to read briefing.json: {}", e))
+}
+
+/// ~/.claude/voice-chat/ からシステムプロンプトを読み込み
+#[tauri::command]
+fn read_system_prompt() -> Result<String, String> {
+    let home = dirs::home_dir().ok_or("Home directory not found")?;
+    let path = home
+        .join(".claude")
+        .join("voice-chat")
+        .join("system-prompt.md");
+    std::fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read system-prompt.md: {}", e))
+}
+
 /// API Key が設定済みか確認
 #[tauri::command]
 fn has_api_key(app: tauri::AppHandle) -> bool {
@@ -71,6 +91,8 @@ pub fn run() {
             get_api_key,
             set_api_key,
             has_api_key,
+            read_briefing,
+            read_system_prompt,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

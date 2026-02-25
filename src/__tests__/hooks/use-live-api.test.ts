@@ -125,6 +125,8 @@ describe("useLiveApi", () => {
     const setupMsg = JSON.parse(ws.sent[0]!);
     expect(setupMsg.setup.model).toContain("gemini");
     expect(setupMsg.setup.generationConfig.responseModalities).toContain("AUDIO");
+    expect(setupMsg.setup.inputAudioTranscription).toEqual({});
+    expect(setupMsg.setup.outputAudioTranscription).toEqual({});
 
     // setupComplete → connected + マイク録音開始
     await act(async () => {
@@ -244,6 +246,55 @@ describe("useLiveApi", () => {
     });
 
     expect(result.current.transcript[0]!.streaming).toBe(false);
+  });
+
+  it("inputTranscription でユーザー音声がストリーミング表示される", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    vi.mocked(invoke).mockResolvedValue("test-api-key");
+
+    const { result } = renderHook(() => useLiveApi());
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    const ws = MockWebSocket.instances[0]!;
+    act(() => {
+      ws.onopen?.();
+    });
+    await act(async () => {
+      ws.onmessage?.({ data: JSON.stringify({ setupComplete: true }) });
+    });
+
+    // ユーザー音声チャンク
+    act(() => {
+      ws.onmessage?.({
+        data: JSON.stringify({
+          serverContent: { inputTranscription: { text: "おはよう" } },
+        }),
+      });
+    });
+
+    expect(result.current.transcript).toHaveLength(1);
+    expect(result.current.transcript[0]!.role).toBe("user");
+    expect(result.current.transcript[0]!.text).toBe("おはよう");
+    expect(result.current.transcript[0]!.streaming).toBe(true);
+
+    // アシスタント応答開始でユーザー発話が確定される
+    act(() => {
+      ws.onmessage?.({
+        data: JSON.stringify({
+          serverContent: { outputTranscription: { text: "おはよう！" } },
+        }),
+      });
+    });
+
+    // ユーザー発話が確定（streaming: false）、アシスタント応答が開始
+    expect(result.current.transcript).toHaveLength(2);
+    expect(result.current.transcript[0]!.role).toBe("user");
+    expect(result.current.transcript[0]!.streaming).toBe(false);
+    expect(result.current.transcript[1]!.role).toBe("assistant");
+    expect(result.current.transcript[1]!.streaming).toBe(true);
   });
 
   it("WebSocket エラーで error 状態になる", async () => {
