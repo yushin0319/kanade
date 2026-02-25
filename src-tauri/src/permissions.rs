@@ -37,6 +37,7 @@ pub fn setup_mic_permission(webview: &tauri::WebviewWindow) {
                         // localhost / tauri オリジンのみ許可
                         if uri_str.starts_with("http://localhost")
                             || uri_str.starts_with("https://localhost")
+                            || uri_str.starts_with("http://tauri.localhost")
                             || uri_str.starts_with("https://tauri.localhost")
                             || uri_str.starts_with("tauri://")
                         {
