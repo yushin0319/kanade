@@ -313,6 +313,8 @@ export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
     connectingRef.current = false;
     setState("idle");
     setError(null);
+    // Gemini はセッション間で記憶を持たないため、切断時にトランスクリプトをクリア
+    setTranscript([]);
   }, []);
 
   const toggleMute = useCallback(() => {

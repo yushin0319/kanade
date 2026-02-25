@@ -100,6 +100,27 @@ fn notify_summary_saved() -> Result<(), String> {
     Ok(())
 }
 
+/// Python 実行ファイルのパスを探索
+fn find_python() -> Option<std::path::PathBuf> {
+    // 1. Programs/Python から探す（Windows の標準インストール先）
+    if let Some(local) = dirs::data_local_dir() {
+        let programs = local.join("Programs").join("Python");
+        if programs.exists() {
+            if let Ok(entries) = std::fs::read_dir(&programs) {
+                for entry in entries.flatten() {
+                    let python = entry.path().join("python.exe");
+                    if python.exists() {
+                        return Some(python);
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. PATH 上の python（WindowsApps スタブの可能性あり、フォールバック）
+    Some(std::path::PathBuf::from("python"))
+}
+
 /// pyautogui スクリプトでサマリーを CC に注入
 #[tauri::command]
 fn inject_to_cc(summary: String) -> Result<(), String> {
@@ -127,7 +148,10 @@ fn inject_to_cc(summary: String) -> Result<(), String> {
     // サマリーテキストを一時ファイル経由で渡す（コマンドライン引数の文字化け回避）
     let summary_path = voice_chat_dir()?.join("summary.md");
 
-    Command::new("python")
+    // Python のパスを探索（WindowsApps のスタブではなく実際の Python を使う）
+    let python = find_python().ok_or("Python not found")?;
+
+    Command::new(&python)
         .arg(&script)
         .arg(&summary_path)
         .spawn()
