@@ -1,73 +1,40 @@
-# React + TypeScript + Vite
+# Kanade（奏）
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Gemini Live API を使ったリアルタイム音声チャット Tauri v2 デスクトップアプリ。
 
-Currently, two official plugins are available:
+## 技術スタック
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Frontend**: React 19 + TypeScript (strict) + Vite 7
+- **Backend**: Rust + Tauri v2
+- **AI**: Gemini Live API (Native Audio)
+- **状態管理**: Zustand
+- **テスト**: Vitest + @testing-library/react
 
-## React Compiler
+## 開発
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+# 依存インストール
+npm install
 
-## Expanding the ESLint configuration
+# フロントエンドビルド
+npm run build
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+# Tauri dev（vcvars64.bat で MSVC 環境を設定後に実行）
+npx tauri dev
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+# テスト
+npm test
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+# リント
+npm run lint
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+### 前提条件
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+- Node.js 20+
+- Rust 1.77+
+- VS2022 "Desktop development with C++" ワークロード（Windows SDK 含む）
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## ライセンス
+
+音声処理の一部は [live-api-web-console](https://github.com/google-gemini/live-api-web-console)（Apache 2.0）を参考にしています。
