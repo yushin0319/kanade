@@ -54,7 +54,7 @@ function App() {
     return (
       <div style={containerStyle}>
         <h1 style={{ marginBottom: "1rem" }}>Kanade</h1>
-        <p style={{ marginBottom: "1rem", color: "#aaa" }}>
+        <p style={{ marginBottom: "1rem", color: "var(--color-text-subtle)" }}>
           Gemini API Key を入力してください
         </p>
         <div style={{ display: "flex", gap: "0.5rem" }}>
@@ -80,8 +80,8 @@ function App() {
         display: "flex",
         flexDirection: "column",
         height: "100vh",
-        backgroundColor: "#1a1a1a",
-        color: "#eee",
+        backgroundColor: "var(--color-bg)",
+        color: "var(--color-text)",
         fontFamily: "sans-serif",
       }}
     >
@@ -89,14 +89,14 @@ function App() {
       <div
         style={{
           padding: "0.75rem 1rem",
-          borderBottom: "1px solid #333",
+          borderBottom: "1px solid var(--color-border)",
           display: "flex",
           alignItems: "center",
           gap: "0.5rem",
         }}
       >
         <h1 style={{ fontSize: "1.2rem", margin: 0 }}>Kanade</h1>
-        <span style={{ color: "#888", fontSize: "0.8rem" }}>
+        <span style={{ color: "var(--color-text-muted)", fontSize: "0.8rem" }}>
           音声モード
         </span>
         <div style={{ marginLeft: "auto", display: "flex", gap: "0.5rem", alignItems: "center" }}>
@@ -117,7 +117,7 @@ function App() {
       {/* 会話ログ */}
       <div style={{ flex: 1, overflow: "auto", padding: "1rem" }}>
         {transcript.length === 0 && state !== "connected" && (
-          <p style={{ color: "#666", textAlign: "center", marginTop: "2rem" }}>
+          <p style={{ color: "var(--color-muted)", textAlign: "center", marginTop: "2rem" }}>
             接続して会話を始めましょう
           </p>
         )}
@@ -137,7 +137,7 @@ function App() {
                 padding: "0.5rem 0.75rem",
                 borderRadius: 8,
                 backgroundColor:
-                  entry.role === "user" ? "#333" : "#1e3a5f",
+                  entry.role === "user" ? "var(--color-border)" : "#1e3a5f",
                 fontSize: "0.9rem",
                 lineHeight: 1.5,
               }}
@@ -154,7 +154,7 @@ function App() {
         <div
           style={{
             padding: "0.75rem 1rem",
-            borderTop: "1px solid #333",
+            borderTop: "1px solid var(--color-border)",
             display: "flex",
             gap: "0.5rem",
           }}
@@ -200,8 +200,8 @@ const containerStyle: React.CSSProperties = {
   alignItems: "center",
   justifyContent: "center",
   height: "100vh",
-  backgroundColor: "#1a1a1a",
-  color: "#eee",
+  backgroundColor: "var(--color-bg)",
+  color: "var(--color-text)",
   fontFamily: "sans-serif",
 };
 
@@ -209,9 +209,9 @@ const inputStyle: React.CSSProperties = {
   flex: 1,
   padding: "0.5rem 0.75rem",
   fontSize: "0.9rem",
-  backgroundColor: "#2a2a2a",
-  color: "#eee",
-  border: "1px solid #444",
+  backgroundColor: "var(--color-bg-secondary)",
+  color: "var(--color-text)",
+  border: "1px solid var(--color-border-light)",
   borderRadius: 6,
   outline: "none",
 };
@@ -219,7 +219,7 @@ const inputStyle: React.CSSProperties = {
 const actionButtonStyle: React.CSSProperties = {
   padding: "0.5rem 1rem",
   fontSize: "0.9rem",
-  backgroundColor: "#4caf50",
+  backgroundColor: "var(--color-accent)",
   color: "#fff",
   border: "none",
   borderRadius: 6,
@@ -230,8 +230,8 @@ const settingsButtonStyle: React.CSSProperties = {
   padding: "0.3rem 0.5rem",
   fontSize: "1rem",
   backgroundColor: "transparent",
-  color: "#aaa",
-  border: "1px solid #555",
+  color: "var(--color-text-subtle)",
+  border: "1px solid var(--color-muted)",
   borderRadius: 6,
   cursor: "pointer",
 };

@@ -44,7 +44,7 @@ export function ControlTray({
   const isConnected = state === "connected" || state === "muted";
 
   return (
-    <div style={{ padding: "1rem", borderTop: "1px solid #333" }}>
+    <div style={{ padding: "1rem", borderTop: "1px solid var(--color-border)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
         {/* 状態インジケータ */}
         <span
@@ -67,7 +67,7 @@ export function ControlTray({
         {isConnected && (
           <button
             onClick={onToggleMute}
-            style={buttonStyle(state === "muted" ? "#f90" : "#666")}
+            style={buttonStyle(state === "muted" ? "#f90" : "var(--color-muted)")}
           >
             {state === "muted" ? "ミュート解除" : "ミュート"}
           </button>
@@ -82,7 +82,7 @@ export function ControlTray({
           <button
             onClick={onConnect}
             disabled={state === "connecting"}
-            style={buttonStyle(state === "connecting" ? "#666" : "#4caf50")}
+            style={buttonStyle(state === "connecting" ? "var(--color-muted)" : "var(--color-accent)")}
           >
             接続
           </button>
