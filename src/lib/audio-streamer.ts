@@ -84,6 +84,11 @@ export class AudioStreamer {
   private scheduleNextBuffer(): void {
     const SCHEDULE_AHEAD_TIME = 0.2;
 
+    if (this.checkInterval) {
+      clearTimeout(this.checkInterval);
+      this.checkInterval = null;
+    }
+
     while (
       this.audioQueue.length > 0 &&
       this.scheduledTime < this.context.currentTime + SCHEDULE_AHEAD_TIME
@@ -132,20 +137,18 @@ export class AudioStreamer {
     if (this.audioQueue.length === 0) {
       if (this.isStreamComplete) {
         this.isPlaying = false;
-        if (this.checkInterval) {
-          clearInterval(this.checkInterval);
+      } else {
+        this.checkInterval = window.setTimeout(() => {
           this.checkInterval = null;
-        }
-      } else if (!this.checkInterval) {
-        this.checkInterval = window.setInterval(() => {
-          if (this.audioQueue.length > 0) {
-            this.scheduleNextBuffer();
-          }
+          this.scheduleNextBuffer();
         }, 100) as unknown as number;
       }
     } else {
       const nextCheckTime = (this.scheduledTime - this.context.currentTime) * 1000;
-      setTimeout(() => this.scheduleNextBuffer(), Math.max(0, nextCheckTime - 50));
+      this.checkInterval = window.setTimeout(() => {
+        this.checkInterval = null;
+        this.scheduleNextBuffer();
+      }, Math.max(0, nextCheckTime - 50)) as unknown as number;
     }
   }
 
@@ -157,7 +160,7 @@ export class AudioStreamer {
     this.scheduledTime = this.context.currentTime;
 
     if (this.checkInterval) {
-      clearInterval(this.checkInterval);
+      clearTimeout(this.checkInterval);
       this.checkInterval = null;
     }
 

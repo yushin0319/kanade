@@ -38,21 +38,11 @@ export function pcm16ToFloat32(chunk: Uint8Array): Float32Array {
 
 /** ArrayBuffer → Base64 文字列に変換 */
 export function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return globalThis.btoa(binary);
+  return btoa(String.fromCharCode(...new Uint8Array(buffer)));
 }
 
 /** Base64 文字列 → ArrayBuffer に変換 */
 export function base64ToArrayBuffer(base64: string): ArrayBuffer {
   if (base64 === "") return new ArrayBuffer(0);
-  const binary = globalThis.atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes.buffer;
+  return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)).buffer;
 }
