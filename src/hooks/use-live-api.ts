@@ -34,6 +34,8 @@ export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
   const wsRef = useRef<WebSocket | null>(null);
   const connectingRef = useRef(false); // レースコンディション防止
   const errorRef = useRef(false);
+  const parseErrorCountRef = useRef(0); // 連続パースエラーカウンター
+  const PARSE_ERROR_THRESHOLD = 5;
 
   const { transcript, addEntry, updateStreaming, finalizeStreaming, clearTranscript } =
     useTranscript();
@@ -201,8 +203,19 @@ export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
           finalizeStreaming("user");
           finalizeStreaming("assistant");
         }
+
+        // 正常処理時は連続エラーカウンターをリセット
+        parseErrorCountRef.current = 0;
       } catch (e) {
-        console.warn("WS message parse error:", e);
+        parseErrorCountRef.current += 1;
+        console.warn("WS message parse error:", e, `(${parseErrorCountRef.current}/${PARSE_ERROR_THRESHOLD})`);
+        if (parseErrorCountRef.current >= PARSE_ERROR_THRESHOLD) {
+          console.error("WS parse error threshold exceeded, transitioning to error state");
+          errorRef.current = true;
+          setState("error");
+          setError("unknown");
+          wsRef.current?.close();
+        }
       }
     };
 
