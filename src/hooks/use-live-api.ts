@@ -1,19 +1,18 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { ConnectionState, ErrorKind, TranscriptEntry } from "../types";
+import type { ConnectionState, ErrorKind } from "../types";
 import type { GeminiModel, GeminiVoice } from "../types/settings";
-import { AudioRecorder } from "../lib/audio-recorder";
-import { AudioStreamer } from "../lib/audio-streamer";
 import { base64ToArrayBuffer } from "../lib/audio-utils";
-import { getAudioContext } from "../lib/audio-context";
 import { parseBriefing, buildSystemInstruction } from "../lib/briefing-loader";
-import VolMeterWorklet from "../lib/worklets/vol-meter";
+import { useTranscript } from "./use-transcript";
+import { useAudioInput } from "./use-audio-input";
+import { useAudioOutput } from "./use-audio-output";
 
 /** Gemini Live API 音声チャットフック */
 export interface UseLiveApiReturn {
   state: ConnectionState;
   error: ErrorKind | null;
-  transcript: TranscriptEntry[];
+  transcript: import("../types").TranscriptEntry[];
   volume: number;
   connect: () => Promise<void>;
   disconnect: () => void;
@@ -31,51 +30,15 @@ export interface UseLiveApiOptions {
 export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
   const [state, setState] = useState<ConnectionState>("idle");
   const [error, setError] = useState<ErrorKind | null>(null);
-  const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const [volume, setVolume] = useState(0);
   const wsRef = useRef<WebSocket | null>(null);
   const connectingRef = useRef(false); // レースコンディション防止
   const errorRef = useRef(false);
-  const recorderRef = useRef<AudioRecorder | null>(null);
-  const streamerRef = useRef<AudioStreamer | null>(null);
 
-  const addEntry = useCallback((role: "user" | "assistant", text: string) => {
-    setTranscript((prev) => [
-      ...prev,
-      { role, text, timestamp: Date.now() },
-    ]);
-  }, []);
-
-  /** 指定ロールのストリーミングエントリをリアルタイム更新 */
-  const updateStreaming = useCallback((role: "user" | "assistant", text: string) => {
-    setTranscript((prev) => {
-      const last = prev[prev.length - 1];
-      if (last && last.role === role && last.streaming) {
-        return [
-          ...prev.slice(0, -1),
-          { ...last, text: last.text + text },
-        ];
-      }
-      return [
-        ...prev,
-        { role, text, timestamp: Date.now(), streaming: true },
-      ];
-    });
-  }, []);
-
-  /** 指定ロールのストリーミングを確定 */
-  const finalizeStreaming = useCallback((role: "user" | "assistant") => {
-    setTranscript((prev) => {
-      const last = prev[prev.length - 1];
-      if (last && last.role === role && last.streaming) {
-        return [
-          ...prev.slice(0, -1),
-          { ...last, streaming: false },
-        ];
-      }
-      return prev;
-    });
-  }, []);
+  const { transcript, addEntry, updateStreaming, finalizeStreaming, clearTranscript } =
+    useTranscript();
+  const { streamerRef, initStreamer, stopStreamer } = useAudioOutput();
+  const { recorderRef, startRecorder, stopRecorder } = useAudioInput();
 
   /** マイク音声データを WebSocket 経由で送信 */
   const sendAudio = useCallback((base64: string) => {
@@ -83,10 +46,7 @@ export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify({
       realtimeInput: {
-        mediaChunks: [{
-          mimeType: "audio/pcm;rate=16000",
-          data: base64,
-        }],
+        mediaChunks: [{ mimeType: "audio/pcm;rate=16000", data: base64 }],
       },
     }));
   }, []);
@@ -120,17 +80,9 @@ export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
     }
 
     // 音声再生用 AudioContext + AudioStreamer を準備
-    let audioStreamer: AudioStreamer;
+    let audioStreamer: Awaited<ReturnType<typeof initStreamer>>;
     try {
-      const playbackCtx = await getAudioContext({ id: "playback", sampleRate: 24000 });
-      audioStreamer = new AudioStreamer(playbackCtx, 24000);
-      // 再生側の VU メーター
-      await audioStreamer.addWorklet(
-        "output-vu-meter",
-        VolMeterWorklet,
-        () => {},
-      );
-      streamerRef.current = audioStreamer;
+      audioStreamer = await initStreamer();
     } catch (e) {
       console.error("AudioStreamer init failed:", e);
       connectingRef.current = false;
@@ -180,9 +132,7 @@ export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
           responseModalities: ["AUDIO"],
           speechConfig: {
             voiceConfig: {
-              prebuiltVoiceConfig: {
-                voiceName: voice,
-              },
+              prebuiltVoiceConfig: { voiceName: voice },
             },
           },
         },
@@ -190,11 +140,8 @@ export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
         outputAudioTranscription: {},
       };
 
-      // System Instructions がある場合は注入
       if (systemInstruction) {
-        setup.systemInstruction = {
-          parts: [{ text: systemInstruction }],
-        };
+        setup.systemInstruction = { parts: [{ text: systemInstruction }] };
       }
 
       ws.send(JSON.stringify({ setup }));
@@ -215,18 +162,8 @@ export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
         if (data.setupComplete) {
           console.log("Setup complete, starting recorder");
           setState("connected");
-
-          // マイク録音を開始
           try {
-            const recorder = new AudioRecorder(
-              {
-                onData: sendAudio,
-                onVolume: setVolume,
-              },
-              16000,
-            );
-            await recorder.start();
-            recorderRef.current = recorder;
+            await startRecorder(sendAudio, setVolume);
             await audioStreamer.resume();
           } catch (e) {
             console.error("Recorder start failed:", e);
@@ -280,11 +217,8 @@ export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
 
     ws.onclose = (ev) => {
       console.log("WebSocket closed:", ev.code, ev.reason);
-      // 録音・再生を停止
-      recorderRef.current?.stop();
-      recorderRef.current = null;
-      streamerRef.current?.stop();
-      streamerRef.current = null;
+      stopRecorder();
+      stopStreamer();
       setVolume(0);
 
       if (ev.code !== 1000 && ev.code !== 1005 && !errorRef.current) {
@@ -297,13 +231,21 @@ export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
       wsRef.current = null;
       connectingRef.current = false;
     };
-  }, [sendAudio, updateStreaming, finalizeStreaming, options.model, options.voice]);
+  }, [
+    sendAudio,
+    updateStreaming,
+    finalizeStreaming,
+    initStreamer,
+    startRecorder,
+    stopRecorder,
+    stopStreamer,
+    options.model,
+    options.voice,
+  ]);
 
   const disconnect = useCallback(() => {
-    recorderRef.current?.stop();
-    recorderRef.current = null;
-    streamerRef.current?.stop();
-    streamerRef.current = null;
+    stopRecorder();
+    stopStreamer();
     setVolume(0);
 
     if (wsRef.current) {
@@ -314,8 +256,8 @@ export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
     setState("idle");
     setError(null);
     // Gemini はセッション間で記憶を持たないため、切断時にトランスクリプトをクリア
-    setTranscript([]);
-  }, []);
+    clearTranscript();
+  }, [stopRecorder, stopStreamer, clearTranscript]);
 
   const toggleMute = useCallback(() => {
     const recorder = recorderRef.current;
@@ -330,7 +272,7 @@ export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
       setVolume(0);
       setState("muted");
     }
-  }, [state]);
+  }, [state, recorderRef]);
 
   const sendText = useCallback(
     (text: string) => {
@@ -338,12 +280,7 @@ export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
 
       const message = {
         clientContent: {
-          turns: [
-            {
-              role: "user",
-              parts: [{ text }],
-            },
-          ],
+          turns: [{ role: "user", parts: [{ text }] }],
           turnComplete: true,
         },
       };
@@ -366,6 +303,7 @@ export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
       }
       connectingRef.current = false;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return { state, error, transcript, volume, connect, disconnect, sendText, toggleMute };

@@ -31,7 +31,7 @@ export function VoiceIndicator({ volume, muted }: VoiceIndicatorProps) {
             width: "4px",
             height: `${height}px`,
             borderRadius: "2px",
-            backgroundColor: muted ? "#666" : "#4CAF50",
+            backgroundColor: muted ? "var(--color-muted)" : "var(--color-accent)",
             transition: "height 0.1s ease",
           }}
         />
