@@ -316,6 +316,50 @@ describe("useLiveApi", () => {
     expect(result.current.error).toBe("connection_failed");
   });
 
+  describe("WSパースエラー閾値", () => {
+    async function setupConnected() {
+      const { invoke } = await import("@tauri-apps/api/core");
+      vi.mocked(invoke).mockResolvedValue("test-api-key");
+
+      const { result } = renderHook(() => useLiveApi());
+      await act(async () => {
+        await result.current.connect();
+      });
+      const ws = MockWebSocket.instances[0]!;
+      act(() => { ws.onopen?.(); });
+      await act(async () => {
+        ws.onmessage?.({ data: JSON.stringify({ setupComplete: true }) });
+      });
+      return { result, ws };
+    }
+
+    it("連続WSパースエラーが5回に達するとerror状態になる", async () => {
+      const { result, ws } = await setupConnected();
+
+      for (let i = 0; i < 5; i++) {
+        act(() => {
+          ws.onmessage?.({ data: "invalid-json-{{{{" });
+        });
+      }
+
+      expect(result.current.state).toBe("error");
+      expect(result.current.error).toBe("unknown");
+    });
+
+    it("連続WSパースエラーが4回ではerror状態にならない", async () => {
+      const { result, ws } = await setupConnected();
+
+      for (let i = 0; i < 4; i++) {
+        act(() => {
+          ws.onmessage?.({ data: "invalid-json-{{{{" });
+        });
+      }
+
+      expect(result.current.state).toBe("connected");
+      expect(result.current.error).toBeNull();
+    });
+  });
+
   it("API Key 未設定で connect() すると error になる", async () => {
     const { invoke } = await import("@tauri-apps/api/core");
     vi.mocked(invoke).mockRejectedValue(new Error("apiKey not set"));
