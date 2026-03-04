@@ -5,14 +5,14 @@
  */
 
 export type WorkletGraph = {
-  node?: AudioWorkletNode;
-  handlers: Array<(this: MessagePort, ev: MessageEvent) => void>;
-};
+  node?: AudioWorkletNode
+  handlers: Array<(this: MessagePort, ev: MessageEvent) => void>
+}
 
 export const registeredWorklets: Map<
   AudioContext,
   Record<string, WorkletGraph>
-> = new Map();
+> = new Map()
 
 /** ワークレットソース文字列から Blob URL を生成 */
 export function createWorkletFromSrc(
@@ -21,7 +21,7 @@ export function createWorkletFromSrc(
 ): string {
   const script = new Blob(
     [`registerProcessor("${workletName}", ${workletSrc})`],
-    { type: "application/javascript" },
-  );
-  return URL.createObjectURL(script);
+    { type: 'application/javascript' },
+  )
+  return URL.createObjectURL(script)
 }
