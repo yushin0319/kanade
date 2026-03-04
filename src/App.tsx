@@ -35,7 +35,7 @@ function App() {
   // 自動スクロール
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [])
+  }, [transcript])
 
   const handleSend = () => {
     const trimmed = input.trim()

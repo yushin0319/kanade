@@ -26,6 +26,9 @@
         "noExplicitAny": "warn",
         "useIterableCallbackReturn": "warn"
       },
+      "correctness": {
+        "useExhaustiveDependencies": "warn"
+      },
       "a11y": {
         "noLabelWithoutControl": "warn"
       }
