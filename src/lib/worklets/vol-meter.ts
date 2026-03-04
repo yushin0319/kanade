@@ -41,6 +41,6 @@ class VolMeter extends AudioWorkletProcessor {
     return true;
   }
 }
-`;
+`
 
-export default VolMeterWorklet;
+export default VolMeterWorklet
