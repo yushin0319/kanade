@@ -95,6 +95,28 @@ beforeEach(() => {
   mockStreamerInstance.stop.mockClear()
 })
 
+/** connected 状態にするヘルパー */
+async function setupConnected() {
+  const { invoke } = await import('@tauri-apps/api/core')
+  vi.mocked(invoke).mockResolvedValue('test-api-key')
+
+  const hook = renderHook(() => useLiveApi())
+
+  await act(async () => {
+    await hook.result.current.connect()
+  })
+
+  const ws = MockWebSocket.instances[0]!
+  act(() => {
+    ws.onopen?.()
+  })
+  await act(async () => {
+    ws.onmessage?.({ data: JSON.stringify({ setupComplete: true }) })
+  })
+
+  return { hook, ws }
+}
+
 describe('useLiveApi', () => {
   it('初期状態は idle', () => {
     const { result } = renderHook(() => useLiveApi())
@@ -141,30 +163,92 @@ describe('useLiveApi', () => {
   })
 
   it('disconnect() で idle に戻り、録音・再生が停止する', async () => {
-    const { invoke } = await import('@tauri-apps/api/core')
-    vi.mocked(invoke).mockResolvedValue('test-api-key')
-
-    const { result } = renderHook(() => useLiveApi())
-
-    await act(async () => {
-      await result.current.connect()
-    })
-
-    const ws = MockWebSocket.instances[0]!
-    act(() => {
-      ws.onopen?.()
-    })
-    await act(async () => {
-      ws.onmessage?.({ data: JSON.stringify({ setupComplete: true }) })
-    })
+    const { hook } = await setupConnected()
 
     act(() => {
-      result.current.disconnect()
+      hook.result.current.disconnect()
     })
 
-    expect(result.current.state).toBe('idle')
+    expect(hook.result.current.state).toBe('idle')
     expect(mockRecorderInstance.stop).toHaveBeenCalled()
     expect(mockStreamerInstance.stop).toHaveBeenCalled()
+  })
+
+  it('sendText() でユーザーメッセージが transcript に追加される', async () => {
+    const { hook, ws } = await setupConnected()
+
+    act(() => {
+      hook.result.current.sendText('こんにちは')
+    })
+
+    expect(hook.result.current.transcript).toHaveLength(1)
+    expect(hook.result.current.transcript[0]!.role).toBe('user')
+    expect(hook.result.current.transcript[0]!.text).toBe('こんにちは')
+
+    const lastSent = JSON.parse(ws.sent[ws.sent.length - 1]!)
+    expect(lastSent.clientContent.turns[0].parts[0].text).toBe('こんにちは')
+  })
+
+  it('outputTranscription でアシスタント応答がストリーミング表示される', async () => {
+    const { hook, ws } = await setupConnected()
+
+    act(() => {
+      ws.onmessage?.({
+        data: JSON.stringify({
+          serverContent: { outputTranscription: { text: 'こんに' } },
+        }),
+      })
+    })
+
+    expect(hook.result.current.transcript).toHaveLength(1)
+    expect(hook.result.current.transcript[0]!.text).toBe('こんに')
+    expect(hook.result.current.transcript[0]!.streaming).toBe(true)
+
+    act(() => {
+      ws.onmessage?.({
+        data: JSON.stringify({
+          serverContent: { outputTranscription: { text: 'ちは！' } },
+        }),
+      })
+    })
+
+    expect(hook.result.current.transcript[0]!.text).toBe('こんにちは！')
+
+    act(() => {
+      ws.onmessage?.({
+        data: JSON.stringify({ serverContent: { turnComplete: true } }),
+      })
+    })
+
+    expect(hook.result.current.transcript[0]!.streaming).toBe(false)
+  })
+
+  it('inputTranscription でユーザー音声がストリーミング表示される', async () => {
+    const { hook, ws } = await setupConnected()
+
+    act(() => {
+      ws.onmessage?.({
+        data: JSON.stringify({
+          serverContent: { inputTranscription: { text: 'おはよう' } },
+        }),
+      })
+    })
+
+    expect(hook.result.current.transcript[0]!.role).toBe('user')
+    expect(hook.result.current.transcript[0]!.text).toBe('おはよう')
+    expect(hook.result.current.transcript[0]!.streaming).toBe(true)
+
+    act(() => {
+      ws.onmessage?.({
+        data: JSON.stringify({
+          serverContent: { outputTranscription: { text: 'おはよう！' } },
+        }),
+      })
+    })
+
+    expect(hook.result.current.transcript).toHaveLength(2)
+    expect(hook.result.current.transcript[0]!.streaming).toBe(false)
+    expect(hook.result.current.transcript[1]!.role).toBe('assistant')
   })
 
   it('WebSocket エラーで error 状態になる', async () => {
