@@ -10,21 +10,14 @@ interface ControlTrayProps {
   onToggleMute: () => void
 }
 
-const STATE_LABELS: Record<ConnectionState, string> = {
-  idle: '待機中',
-  connecting: '接続中...',
-  connected: '通話中',
-  muted: 'ミュート中',
-  error: 'エラー',
-}
-
-const STATE_COLORS: Record<ConnectionState, string> = {
-  idle: '#888',
-  connecting: '#ff0',
-  connected: '#0f0',
-  muted: '#f90',
-  error: '#f00',
-}
+const STATE_CONFIG: Record<ConnectionState, { label: string; color: string }> =
+  {
+    idle: { label: '待機中', color: '#888' },
+    connecting: { label: '接続中...', color: '#ff0' },
+    connected: { label: '通話中', color: '#0f0' },
+    muted: { label: 'ミュート中', color: '#f90' },
+    error: { label: 'エラー', color: '#f00' },
+  }
 
 const ERROR_MESSAGES: Record<ErrorKind, string> = {
   connection_failed: '接続に失敗しました。API Key を確認してください。',
@@ -55,10 +48,10 @@ export function ControlTray({
             width: 12,
             height: 12,
             borderRadius: '50%',
-            backgroundColor: STATE_COLORS[state],
+            backgroundColor: STATE_CONFIG[state].color,
           }}
         />
-        <span style={{ fontWeight: 'bold' }}>{STATE_LABELS[state]}</span>
+        <span style={{ fontWeight: 'bold' }}>{STATE_CONFIG[state].label}</span>
 
         {/* 音量インジケータ（接続中のみ） */}
         {isConnected && (
