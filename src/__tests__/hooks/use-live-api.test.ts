@@ -95,6 +95,28 @@ beforeEach(() => {
   mockStreamerInstance.stop.mockClear()
 })
 
+/** connected 状態にするヘルパー */
+async function setupConnected() {
+  const { invoke } = await import('@tauri-apps/api/core')
+  vi.mocked(invoke).mockResolvedValue('test-api-key')
+
+  const hook = renderHook(() => useLiveApi())
+
+  await act(async () => {
+    await hook.result.current.connect()
+  })
+
+  const ws = MockWebSocket.instances[0]!
+  act(() => {
+    ws.onopen?.()
+  })
+  await act(async () => {
+    ws.onmessage?.({ data: JSON.stringify({ setupComplete: true }) })
+  })
+
+  return { hook, ws }
+}
+
 describe('useLiveApi', () => {
   it('初期状態は idle', () => {
     const { result } = renderHook(() => useLiveApi())
@@ -141,81 +163,35 @@ describe('useLiveApi', () => {
   })
 
   it('disconnect() で idle に戻り、録音・再生が停止する', async () => {
-    const { invoke } = await import('@tauri-apps/api/core')
-    vi.mocked(invoke).mockResolvedValue('test-api-key')
-
-    const { result } = renderHook(() => useLiveApi())
-
-    await act(async () => {
-      await result.current.connect()
-    })
-
-    const ws = MockWebSocket.instances[0]!
-    act(() => {
-      ws.onopen?.()
-    })
-    await act(async () => {
-      ws.onmessage?.({ data: JSON.stringify({ setupComplete: true }) })
-    })
+    const { hook } = await setupConnected()
 
     act(() => {
-      result.current.disconnect()
+      hook.result.current.disconnect()
     })
 
-    expect(result.current.state).toBe('idle')
+    expect(hook.result.current.state).toBe('idle')
     expect(mockRecorderInstance.stop).toHaveBeenCalled()
     expect(mockStreamerInstance.stop).toHaveBeenCalled()
   })
 
   it('sendText() でユーザーメッセージが transcript に追加される', async () => {
-    const { invoke } = await import('@tauri-apps/api/core')
-    vi.mocked(invoke).mockResolvedValue('test-api-key')
-
-    const { result } = renderHook(() => useLiveApi())
-
-    await act(async () => {
-      await result.current.connect()
-    })
-
-    const ws = MockWebSocket.instances[0]!
-    act(() => {
-      ws.onopen?.()
-    })
-    await act(async () => {
-      ws.onmessage?.({ data: JSON.stringify({ setupComplete: true }) })
-    })
+    const { hook, ws } = await setupConnected()
 
     act(() => {
-      result.current.sendText('こんにちは')
+      hook.result.current.sendText('こんにちは')
     })
 
-    expect(result.current.transcript).toHaveLength(1)
-    expect(result.current.transcript[0]!.role).toBe('user')
-    expect(result.current.transcript[0]!.text).toBe('こんにちは')
+    expect(hook.result.current.transcript).toHaveLength(1)
+    expect(hook.result.current.transcript[0]!.role).toBe('user')
+    expect(hook.result.current.transcript[0]!.text).toBe('こんにちは')
 
     const lastSent = JSON.parse(ws.sent[ws.sent.length - 1]!)
     expect(lastSent.clientContent.turns[0].parts[0].text).toBe('こんにちは')
   })
 
   it('outputTranscription でアシスタント応答がストリーミング表示される', async () => {
-    const { invoke } = await import('@tauri-apps/api/core')
-    vi.mocked(invoke).mockResolvedValue('test-api-key')
+    const { hook, ws } = await setupConnected()
 
-    const { result } = renderHook(() => useLiveApi())
-
-    await act(async () => {
-      await result.current.connect()
-    })
-
-    const ws = MockWebSocket.instances[0]!
-    act(() => {
-      ws.onopen?.()
-    })
-    await act(async () => {
-      ws.onmessage?.({ data: JSON.stringify({ setupComplete: true }) })
-    })
-
-    // チャンク1
     act(() => {
       ws.onmessage?.({
         data: JSON.stringify({
@@ -224,11 +200,10 @@ describe('useLiveApi', () => {
       })
     })
 
-    expect(result.current.transcript).toHaveLength(1)
-    expect(result.current.transcript[0]!.text).toBe('こんに')
-    expect(result.current.transcript[0]!.streaming).toBe(true)
+    expect(hook.result.current.transcript).toHaveLength(1)
+    expect(hook.result.current.transcript[0]!.text).toBe('こんに')
+    expect(hook.result.current.transcript[0]!.streaming).toBe(true)
 
-    // チャンク2（蓄積）
     act(() => {
       ws.onmessage?.({
         data: JSON.stringify({
@@ -237,38 +212,20 @@ describe('useLiveApi', () => {
       })
     })
 
-    expect(result.current.transcript).toHaveLength(1)
-    expect(result.current.transcript[0]!.text).toBe('こんにちは！')
+    expect(hook.result.current.transcript[0]!.text).toBe('こんにちは！')
 
-    // ターン完了
     act(() => {
       ws.onmessage?.({
         data: JSON.stringify({ serverContent: { turnComplete: true } }),
       })
     })
 
-    expect(result.current.transcript[0]!.streaming).toBe(false)
+    expect(hook.result.current.transcript[0]!.streaming).toBe(false)
   })
 
   it('inputTranscription でユーザー音声がストリーミング表示される', async () => {
-    const { invoke } = await import('@tauri-apps/api/core')
-    vi.mocked(invoke).mockResolvedValue('test-api-key')
+    const { hook, ws } = await setupConnected()
 
-    const { result } = renderHook(() => useLiveApi())
-
-    await act(async () => {
-      await result.current.connect()
-    })
-
-    const ws = MockWebSocket.instances[0]!
-    act(() => {
-      ws.onopen?.()
-    })
-    await act(async () => {
-      ws.onmessage?.({ data: JSON.stringify({ setupComplete: true }) })
-    })
-
-    // ユーザー音声チャンク
     act(() => {
       ws.onmessage?.({
         data: JSON.stringify({
@@ -277,12 +234,10 @@ describe('useLiveApi', () => {
       })
     })
 
-    expect(result.current.transcript).toHaveLength(1)
-    expect(result.current.transcript[0]!.role).toBe('user')
-    expect(result.current.transcript[0]!.text).toBe('おはよう')
-    expect(result.current.transcript[0]!.streaming).toBe(true)
+    expect(hook.result.current.transcript[0]!.role).toBe('user')
+    expect(hook.result.current.transcript[0]!.text).toBe('おはよう')
+    expect(hook.result.current.transcript[0]!.streaming).toBe(true)
 
-    // アシスタント応答開始でユーザー発話が確定される
     act(() => {
       ws.onmessage?.({
         data: JSON.stringify({
@@ -291,12 +246,9 @@ describe('useLiveApi', () => {
       })
     })
 
-    // ユーザー発話が確定（streaming: false）、アシスタント応答が開始
-    expect(result.current.transcript).toHaveLength(2)
-    expect(result.current.transcript[0]!.role).toBe('user')
-    expect(result.current.transcript[0]!.streaming).toBe(false)
-    expect(result.current.transcript[1]!.role).toBe('assistant')
-    expect(result.current.transcript[1]!.streaming).toBe(true)
+    expect(hook.result.current.transcript).toHaveLength(2)
+    expect(hook.result.current.transcript[0]!.streaming).toBe(false)
+    expect(hook.result.current.transcript[1]!.role).toBe('assistant')
   })
 
   it('WebSocket エラーで error 状態になる', async () => {
