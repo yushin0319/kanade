@@ -24,6 +24,11 @@ export function parseBriefing(data: unknown): BriefingData | null {
   return result.success ? result.data : null
 }
 
+/** 見出し付き箇条書きセクションを生成 */
+function formatBulletList(heading: string, items: string[]): string {
+  return `## ${heading}\n${items.map((item) => `- ${item}`).join('\n')}`
+}
+
 /** ブリーフィングデータと system-prompt から System Instructions を生成 */
 export function buildSystemInstruction(
   briefing: BriefingData,
@@ -36,21 +41,15 @@ export function buildSystemInstruction(
   }
 
   if (briefing.tasks.length > 0) {
-    sections.push(
-      `## 今日のタスク\n${briefing.tasks.map((t) => `- ${t}`).join('\n')}`,
-    )
+    sections.push(formatBulletList('今日のタスク', briefing.tasks))
   }
 
   if (briefing.emails.length > 0) {
-    sections.push(
-      `## 重要メール\n${briefing.emails.map((e) => `- ${e}`).join('\n')}`,
-    )
+    sections.push(formatBulletList('重要メール', briefing.emails))
   }
 
   if (briefing.news.length > 0) {
-    sections.push(
-      `## ニュース\n${briefing.news.map((n) => `- ${n}`).join('\n')}`,
-    )
+    sections.push(formatBulletList('ニュース', briefing.news))
   }
 
   if (briefing.custom) {
