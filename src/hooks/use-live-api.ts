@@ -32,9 +32,12 @@ export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
   const [error, setError] = useState<ErrorKind | null>(null)
   const [volume, setVolume] = useState(0)
   const wsRef = useRef<WebSocket | null>(null)
-  const connectingRef = useRef(false) // レースコンディション防止
-  const errorRef = useRef(false)
-  const parseErrorCountRef = useRef(0) // 連続パースエラーカウンター
+  // 非同期コールバック内から参照する内部フラグ群（state は stale closure になるため Ref で管理）
+  const internalRef = useRef({
+    connecting: false,
+    hasError: false,
+    parseErrors: 0,
+  })
   const PARSE_ERROR_THRESHOLD = 5
 
   const {
@@ -62,19 +65,19 @@ export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
 
   const connect = useCallback(async () => {
     // 既存接続 or 接続処理中ならブロック（レースコンディション防止）
-    if (wsRef.current || connectingRef.current) return
-    connectingRef.current = true
+    if (wsRef.current || internalRef.current.connecting) return
+    internalRef.current.connecting = true
 
     setState('connecting')
     setError(null)
-    errorRef.current = false
+    internalRef.current.hasError = false
 
     let apiKey: string
     try {
       apiKey = await invoke<string>('get_api_key')
     } catch (e) {
       console.error('get_api_key failed:', e)
-      connectingRef.current = false
+      internalRef.current.connecting = false
       setState('error')
       setError('connection_failed')
       return
@@ -82,7 +85,7 @@ export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
 
     if (!apiKey) {
       console.error('API key is empty')
-      connectingRef.current = false
+      internalRef.current.connecting = false
       setState('error')
       setError('connection_failed')
       return
@@ -94,7 +97,7 @@ export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
       audioStreamer = await initStreamer()
     } catch (e) {
       console.error('AudioStreamer init failed:', e)
-      connectingRef.current = false
+      internalRef.current.connecting = false
       setState('error')
       setError('unknown')
       return
@@ -227,19 +230,19 @@ export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
         }
 
         // 正常処理時は連続エラーカウンターをリセット
-        parseErrorCountRef.current = 0
+        internalRef.current.parseErrors = 0
       } catch (e) {
-        parseErrorCountRef.current += 1
+        internalRef.current.parseErrors += 1
         console.warn(
           'WS message parse error:',
           e,
-          `(${parseErrorCountRef.current}/${PARSE_ERROR_THRESHOLD})`,
+          `(${internalRef.current.parseErrors}/${PARSE_ERROR_THRESHOLD})`,
         )
-        if (parseErrorCountRef.current >= PARSE_ERROR_THRESHOLD) {
+        if (internalRef.current.parseErrors >= PARSE_ERROR_THRESHOLD) {
           console.error(
             'WS parse error threshold exceeded, transitioning to error state',
           )
-          errorRef.current = true
+          internalRef.current.hasError = true
           setState('error')
           setError('unknown')
           wsRef.current?.close()
@@ -249,7 +252,7 @@ export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
 
     ws.onerror = (ev) => {
       console.error('WebSocket error:', ev)
-      errorRef.current = true
+      internalRef.current.hasError = true
       setState('error')
       setError('connection_failed')
       // ソケットを確実に閉じる（onclose が呼ばれてクリーンアップされる）
@@ -262,15 +265,19 @@ export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
       stopStreamer()
       setVolume(0)
 
-      if (ev.code !== 1000 && ev.code !== 1005 && !errorRef.current) {
-        errorRef.current = true
+      if (
+        ev.code !== 1000 &&
+        ev.code !== 1005 &&
+        !internalRef.current.hasError
+      ) {
+        internalRef.current.hasError = true
         setState('error')
         setError('connection_failed')
-      } else if (!errorRef.current) {
+      } else if (!internalRef.current.hasError) {
         setState('idle')
       }
       wsRef.current = null
-      connectingRef.current = false
+      internalRef.current.connecting = false
     }
   }, [
     sendAudio,
@@ -293,7 +300,7 @@ export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
       wsRef.current.close()
       wsRef.current = null
     }
-    connectingRef.current = false
+    internalRef.current.connecting = false
     setState('idle')
     setError(null)
     // Gemini はセッション間で記憶を持たないため、切断時にトランスクリプトをクリア
@@ -342,7 +349,7 @@ export function useLiveApi(options: UseLiveApiOptions = {}): UseLiveApiReturn {
         wsRef.current.close()
         wsRef.current = null
       }
-      connectingRef.current = false
+      internalRef.current.connecting = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recorderRef, streamerRef])
