@@ -10,3 +10,8 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "windows"
+        versions: [">= 0.62.0, < 0.63.0"]
+        # webview2-com-sys が windows-strings 0.5 未対応のため
+        # 0.63+ で解消されれば自動で PR が来る
