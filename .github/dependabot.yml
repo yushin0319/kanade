@@ -15,3 +15,7 @@ updates:
         versions: [">= 0.62.0, < 0.63.0"]
         # webview2-com-sys が windows-strings 0.5 未対応のため
         # 0.63+ で解消されれば自動で PR が来る
+      - dependency-name: "webview2-com"
+        versions: [">= 0.39.0"]
+        # wry/tauri-runtime-wry が webview2-com ^0.38 を使うため
+        # 0.39+ は windows-core 0.62 を要求し型不整合が発生する
