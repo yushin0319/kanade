@@ -51,6 +51,22 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      - name: Debug Cargo.lock
+        working-directory: src-tauri
+        shell: bash
+        run: |
+          echo "=== webview2-com entries in Cargo.lock ==="
+          grep -c 'name = "webview2-com"' Cargo.lock
+          grep -A3 'name = "webview2-com"' Cargo.lock
+          echo "=== windows-core entries in Cargo.lock ==="
+          grep -c 'name = "windows-core"' Cargo.lock
+          grep -A3 'name = "windows-core"' Cargo.lock
+          echo "=== wry entry ==="
+          grep -A40 'name = "wry"' Cargo.lock | head -45
+          echo "=== cargo tree for webview2-com ==="
+          cargo tree -p webview2-com --locked 2>&1 || true
+          echo "=== cargo tree duplicates ==="
+          cargo tree -d --locked 2>&1 | grep -i "webview2\|windows-core\|windows-string" || true
       - name: Cargo check
         working-directory: src-tauri
         run: cargo check --locked
