@@ -30,15 +30,13 @@ describe('cc-notifier', () => {
 
   describe('injectToCC', () => {
     it('Tauri command で pyautogui スクリプトを実行する', async () => {
-      await injectToCC('テストサマリー')
-      expect(mockInvoke).toHaveBeenCalledWith('inject_to_cc', {
-        summary: 'テストサマリー',
-      })
+      await injectToCC()
+      expect(mockInvoke).toHaveBeenCalledWith('inject_to_cc')
     })
 
     it('実行エラーは例外をスローする', async () => {
       mockInvoke.mockRejectedValue(new Error('Script failed'))
-      await expect(injectToCC('テスト')).rejects.toThrow('Script failed')
+      await expect(injectToCC()).rejects.toThrow('Script failed')
     })
   })
 })

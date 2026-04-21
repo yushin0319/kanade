@@ -122,19 +122,13 @@ fn find_python() -> Option<std::path::PathBuf> {
 }
 
 /// pyautogui スクリプトでサマリーを CC に注入
+///
+/// サマリーは write_summary で事前に summary.md に書き出され、ここではその
+/// ファイルパスだけを Python に渡す。文字列引数を受け取らないのでコマンド
+/// ラインへの混入経路がなく、ブロックリスト型フィルタは不要（レビューで
+/// 誤った安心感を与えると指摘され削除）。
 #[tauri::command]
-fn inject_to_cc(summary: String) -> Result<(), String> {
-    // 不審コマンド文字列のフィルタ
-    let suspicious = [
-        "rm -rf", "del /f", "format c:", "shutdown",
-        "powershell -e", "cmd /c", "sudo ",
-    ];
-    for pattern in &suspicious {
-        if summary.to_lowercase().contains(pattern) {
-            return Err(format!("Suspicious content detected: {}", pattern));
-        }
-    }
-
+fn inject_to_cc() -> Result<(), String> {
     let home = dirs::home_dir().ok_or("Home directory not found")?;
     let script = home
         .join(".claude")
@@ -145,7 +139,7 @@ fn inject_to_cc(summary: String) -> Result<(), String> {
         return Err("kanade-send-to-cc.py not found".to_string());
     }
 
-    // サマリーテキストを一時ファイル経由で渡す（コマンドライン引数の文字化け回避）
+    // 事前に write_summary で書き出されたサマリーファイルのパス
     let summary_path = voice_chat_dir()?.join("summary.md");
 
     // Python のパスを探索（WindowsApps のスタブではなく実際の Python を使う）
