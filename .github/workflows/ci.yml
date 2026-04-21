@@ -11,23 +11,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - run: npm test -- --run
+          bun-version: 1.3.13
+      - run: bun install --frozen-lockfile
+      - run: bun run test -- --run
 
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - run: npx tsc --noEmit
+          bun-version: 1.3.13
+      - run: bun install --frozen-lockfile
+      - run: bunx tsc --noEmit
 
   rust-check:
     runs-on: windows-latest
@@ -41,12 +39,11 @@ jobs:
             ~/.cargo/git
             src-tauri/target
           key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - run: npm run build
+          bun-version: 1.3.13
+      - run: bun install --frozen-lockfile
+      - run: bun run build
       - name: Cargo check
         working-directory: src-tauri
         run: cargo check --locked
