@@ -67,7 +67,7 @@ export function SendToCCButton({
       // pyautogui 注入（オプション）
       if (pyautoguiEnabled) {
         try {
-          await injectToCC(summary)
+          await injectToCC()
         } catch (e) {
           console.warn('CC injection failed (continuing):', e)
         }
