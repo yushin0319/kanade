@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "lint": "npx @biomejs/biome check .",
+    "lint": "bunx @biomejs/biome check .",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -41,7 +41,7 @@
   },
   "lint-staged": {
     "*.{js,ts,jsx,tsx,json,css}": [
-      "npx @biomejs/biome check --write --no-errors-on-unmatched"
+      "bunx @biomejs/biome check --write --no-errors-on-unmatched"
     ]
   }
 }
