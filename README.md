@@ -4,26 +4,32 @@ Gemini Live API を使ったリアルタイム音声チャット Tauri v2 デス
 
 ## スタック
 
-- Frontend: React 19 + TypeScript + Vite 8 + Tailwind / Biome / vitest
-- Desktop: Tauri 2.10.3（Rust、WebView2）+ tauri-plugin-store / tauri-plugin-log
-- AI: Gemini Live API（`@google/genai` 1.50.1、WebSocket `wss://generativelanguage.googleapis.com`）
-- 状態管理: Zustand
+- Frontend: React 19 + TypeScript + Vite 8 / Biome / vitest
+- Desktop: Tauri 2.11.1（Rust、WebView2）+ tauri-plugin-store / tauri-plugin-log
+- AI: Gemini Live API（`@google/genai` ^2.2.0、WebSocket `wss://generativelanguage.googleapis.com`）
+- バリデーション: Zod
+- 状態管理: React hooks（useState/useReducer）+ Tauri store
 - パッケージマネージャ: Bun（`bun.lock` あり）
 
 ## 構成
 
 ```
 src/
-  App.tsx              メイン UI（接続/切断・音声・transcript・サマリー送出）
-  hooks/use-live-api.ts Gemini Live API ラッパー
-  hooks/use-settings.ts API キー / モデル設定の永続化
+  App.tsx                  メイン UI（接続/切断・音声・transcript・サマリー送出）
+  hooks/
+    use-live-api.ts        Gemini Live API ラッパー
+    use-settings.ts        API キー / モデル設定の永続化
+    use-audio-input.ts     マイク入力（WebAudio）
+    use-audio-output.ts    Gemini 音声出力再生
+    use-transcript.ts      字起こしバッファ管理
   components/
-    ControlTray.tsx    接続トグル・マイクトグル・モデル選択
-    SettingsPanel.tsx  API キー入力
-    SendToCCButton.tsx Claude Code 連携（pyautogui 注入）
+    ControlTray.tsx        接続トグル・マイクトグル・モデル選択
+    SettingsPanel.tsx      API キー入力
+    SendToCCButton.tsx     Claude Code 連携（pyautogui 注入）
+    VoiceIndicator.tsx     音量インジケータ
 src-tauri/
-  Cargo.toml           Rust dependencies（tauri 2.10.3 / webview2-com 0.38）
-  src/lib.rs           Tauri commands（has_api_key / set_api_key / send_to_cc 等）
+  Cargo.toml               Rust dependencies（tauri 2.11.1 / webview2-com 0.38）
+  src/lib.rs               Tauri commands（has_api_key / set_api_key / send_to_cc 等）
 ```
 
 ## 機能
