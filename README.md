@@ -5,7 +5,7 @@ Gemini Live API を使ったリアルタイム音声チャット Tauri v2 デス
 ## スタック
 
 - Frontend: React 19 + TypeScript + Vite 8 / Biome / vitest
-- Desktop: Tauri 2.11.1（Rust、WebView2）+ tauri-plugin-store / tauri-plugin-log
+- Desktop: Tauri 2.11.2（Rust、WebView2）+ tauri-plugin-store / tauri-plugin-log
 - AI: Gemini Live API（`@google/genai` ^2.2.0、WebSocket `wss://generativelanguage.googleapis.com`）
 - バリデーション: Zod
 - 状態管理: React hooks（useState/useReducer）+ Tauri store
@@ -28,7 +28,7 @@ src/
     SendToCCButton.tsx     Claude Code 連携（pyautogui 注入）
     VoiceIndicator.tsx     音量インジケータ
 src-tauri/
-  Cargo.toml               Rust dependencies（tauri 2.11.1 / webview2-com 0.38）
+  Cargo.toml               Rust dependencies（tauri 2.11.2 / webview2-com 0.38）
   src/lib.rs               Tauri commands（has_api_key / set_api_key / send_to_cc 等）
 ```
 
