@@ -5,6 +5,16 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    groups:
+      # react と react-dom は完全に同一バージョンである必要がある
+      # (不一致だと react-dom が "Incompatible React versions" で throw する)。
+      # 別 PR で片方だけ auto-merge されると main が壊れるため 1 PR にまとめる。
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
   - package-ecosystem: "cargo"
     directory: "/src-tauri"
     schedule:
