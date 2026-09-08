@@ -4,10 +4,10 @@ Gemini Live API を使ったリアルタイム音声チャット Tauri v2 デス
 
 ## スタック
 
-- Frontend: React 19 + TypeScript + Vite 8 / Biome / vitest
+- Frontend: React 19 + TypeScript 7 + Vite 8 / Biome / vitest v4
 - Desktop: Tauri 2.11.2（Rust、WebView2）+ tauri-plugin-store / tauri-plugin-log
-- AI: Gemini Live API（`@google/genai` ^2.2.0、WebSocket `wss://generativelanguage.googleapis.com`）
-- バリデーション: Zod
+- AI: Gemini Live API（`@google/genai` ^2.19.0、WebSocket `wss://generativelanguage.googleapis.com`）
+- バリデーション: Zod v4
 - 状態管理: React hooks（useState/useReducer）+ Tauri store
 - パッケージマネージャ: Bun（`bun.lock` あり）
 
@@ -27,9 +27,19 @@ src/
     SettingsPanel.tsx      API キー入力
     SendToCCButton.tsx     Claude Code 連携（pyautogui 注入）
     VoiceIndicator.tsx     音量インジケータ
+  lib/
+    audio-*.ts             WebAudio 入出力・録音・ストリーミング
+    worklets/              AudioWorklet（音声処理・音量メータ）
+    summarizer.ts          会話サマリー生成
+    summary-writer.ts      サマリー / 会話ログの書き出し
+    briefing-loader.ts     ブリーフィング読み込み
+    cc-notifier.ts         Claude Code への通知
+  types/                   設定・共通型定義
 src-tauri/
   Cargo.toml               Rust dependencies（tauri 2.11.2 / webview2-com 0.38）
-  src/lib.rs               Tauri commands（has_api_key / set_api_key / send_to_cc 等）
+  src/lib.rs               Tauri commands（has_api_key / get_api_key / set_api_key /
+                           read_briefing / read_system_prompt / write_summary /
+                           write_conversation / notify_summary_saved / inject_to_cc）
 ```
 
 ## 機能
@@ -47,7 +57,7 @@ bun install
 bun run dev          # Vite 開発サーバー
 bun run build        # tsc -b && vite build
 bun run lint         # Biome
-bun test             # vitest
+bun run test         # vitest
 bun run tauri dev    # Tauri デスクトップ起動
 ```
 
