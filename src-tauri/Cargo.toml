@@ -22,7 +22,7 @@ log = "0.4"
 tauri = { version = "2.11.2", features = ["tray-icon"] }
 tauri-plugin-log = "2"
 tauri-plugin-store = "2"
-dirs = "6"
+dirs = "7"
 
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.38"
