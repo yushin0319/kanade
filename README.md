@@ -4,9 +4,9 @@ Gemini Live API を使ったリアルタイム音声チャット Tauri v2 デス
 
 ## スタック
 
-- Frontend: React 19 + TypeScript 7 + Vite 8 / Biome / vitest v4
-- Desktop: Tauri 2.11.2（Rust、WebView2）+ tauri-plugin-store / tauri-plugin-log
-- AI: Gemini Live API（`@google/genai` ^2.19.0、WebSocket `wss://generativelanguage.googleapis.com`）
+- Frontend: React 19 + TypeScript 7 + Vite 8 / Biome / vitest v5
+- Desktop: Tauri 2（Cargo.toml は `2.11.2` 指定、Cargo.lock の解決版は 2.11.6。Rust、WebView2）+ tauri-plugin-store / tauri-plugin-log
+- AI: Gemini Live API（`@google/genai` ^2.22.0、WebSocket `wss://generativelanguage.googleapis.com`）
 - バリデーション: Zod v4
 - 状態管理: React hooks（useState/useReducer）+ Tauri store
 - パッケージマネージャ: Bun（`bun.lock` あり）
@@ -36,7 +36,7 @@ src/
     cc-notifier.ts         Claude Code への通知
   types/                   設定・共通型定義
 src-tauri/
-  Cargo.toml               Rust dependencies（tauri 2.11.2 / webview2-com 0.38）
+  Cargo.toml               Rust dependencies（tauri "2.11.2" / webview2-com 0.38）
   src/lib.rs               Tauri commands（has_api_key / get_api_key / set_api_key /
                            read_briefing / read_system_prompt / write_summary /
                            write_conversation / notify_summary_saved / inject_to_cc）
