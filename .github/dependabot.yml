@@ -21,11 +21,11 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 5
     ignore:
+      # windows / webview2-com は wry (tauri-runtime-wry) が使う版と揃える必要がある。
+      # 単独で 0.x のマイナー (= 破壊的変更) を上げると二重版になり型不整合でビルドが壊れるので、
+      # パッチだけ自動で受け、マイナー以上は tauri の更新に合わせて手で上げる
+      # (2026-10-04: tauri 2.12 / wry 0.57 に合わせて webview2-com 0.39 / windows 0.62 へ追従、#173)
       - dependency-name: "windows"
-        versions: [">= 0.62.0, < 0.63.0"]
-        # webview2-com-sys が windows-strings 0.5 未対応のため
-        # 0.63+ で解消されれば自動で PR が来る
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "webview2-com"
-        versions: [">= 0.39.0"]
-        # wry/tauri-runtime-wry が webview2-com ^0.38 を使うため
-        # 0.39+ は windows-core 0.62 を要求し型不整合が発生する
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
