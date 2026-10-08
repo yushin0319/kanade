@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@google/genai": "^2.26.0",
-    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/api": "^2.12.1",
     "@tauri-apps/plugin-store": "^2.4.5",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
