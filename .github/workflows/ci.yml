@@ -25,7 +25,9 @@ jobs:
         with:
           bun-version: 1.3.13
       - run: bun install --frozen-lockfile
-      - run: bunx tsc --noEmit
+      # ルートの tsconfig.json は "files": [] + references なので、tsc --noEmit だと 0 ファイルしか検査しない。
+      # -b で tsconfig.app.json / tsconfig.node.json まで型を検査する
+      - run: bunx tsc -b
 
   rust-check:
     runs-on: windows-latest
